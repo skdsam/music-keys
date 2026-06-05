@@ -322,10 +322,11 @@ function App() {
       >
         <aside className="rail left-rail">
           <button
+            className="edge-toggle"
             onClick={() => setIsSidebarOpen((value) => !value)}
             title={isSidebarOpen ? "Hide filters" : "Show filters"}
           >
-            {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+            {isSidebarOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
           </button>
         </aside>
 
@@ -479,8 +480,8 @@ function Inspector({
   if (!isOpen) {
     return (
       <aside className="rail right-rail">
-        <button onClick={onToggle} title="Show inspector">
-          <ChevronLeft size={16} />
+        <button className="edge-toggle" onClick={onToggle} title="Show inspector">
+          <ChevronLeft size={13} />
         </button>
       </aside>
     );
@@ -497,8 +498,8 @@ function Inspector({
           <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
             <RefreshCw size={15} />
           </button>
-          <button onClick={onToggle} title="Hide inspector">
-            <ChevronRight size={15} />
+          <button className="edge-toggle inline-toggle" onClick={onToggle} title="Hide inspector">
+            <ChevronRight size={13} />
           </button>
         </div>
       </div>
