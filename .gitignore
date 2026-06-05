@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+
+# Tauri/Rust build output
+src-tauri/target/
+
+# Generated Tauri schemas and caches
+src-tauri/gen/
+
+# Local dev logs
+.dev-logs/
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+
+# Temporary exports
+sample-key-studio-export.csv
+sample-key-studio-export.json

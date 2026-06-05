@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default desktop permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/essentia_streaming_extractor_music",
+          "cmd": "binaries/essentia_streaming_extractor_music",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    }
+  ]
+}
