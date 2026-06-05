@@ -1,8 +1,6 @@
 import {
   Activity,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Download,
   FileJson,
   FolderOpen,
@@ -13,6 +11,10 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Table2,
   AudioWaveform
 } from "lucide-react";
@@ -292,6 +294,13 @@ function App() {
         </div>
 
         <div className="toolbar">
+          <button
+            onClick={() => setIsSidebarOpen((value) => !value)}
+            title={isSidebarOpen ? "Hide filters" : "Show filters"}
+          >
+            {isSidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+            <span>Filters</span>
+          </button>
           <button className="primary" onClick={openFolder} title="Open folder">
             <FolderOpen size={17} />
             <span>Open</span>
@@ -312,6 +321,13 @@ function App() {
             <FileJson size={17} />
             <span>JSON</span>
           </button>
+          <button
+            onClick={() => setIsInspectorOpen((value) => !value)}
+            title={isInspectorOpen ? "Hide inspector" : "Show inspector"}
+          >
+            {isInspectorOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
+            <span>Inspector</span>
+          </button>
         </div>
       </header>
 
@@ -320,16 +336,6 @@ function App() {
           !isInspectorOpen ? "inspector-collapsed" : ""
         }`}
       >
-        <aside className="rail left-rail">
-          <button
-            className="edge-toggle"
-            onClick={() => setIsSidebarOpen((value) => !value)}
-            title={isSidebarOpen ? "Hide filters" : "Show filters"}
-          >
-            {isSidebarOpen ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
-          </button>
-        </aside>
-
         <aside className="sidebar">
           <div className="stat-grid">
             <Metric label="Files" value={samples.length.toString()} />
@@ -423,7 +429,6 @@ function App() {
         <Inspector
           sample={selected}
           isOpen={isInspectorOpen}
-          onToggle={() => setIsInspectorOpen((value) => !value)}
           onChange={updateSelected}
           onReanalyze={reanalyzeSelected}
         />
@@ -435,13 +440,11 @@ function App() {
 function Inspector({
   sample,
   isOpen,
-  onToggle,
   onChange,
   onReanalyze
 }: {
   sample?: SampleRecord;
   isOpen: boolean;
-  onToggle: () => void;
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
 }) {
@@ -478,13 +481,7 @@ function Inspector({
   };
 
   if (!isOpen) {
-    return (
-      <aside className="rail right-rail">
-        <button className="edge-toggle" onClick={onToggle} title="Show inspector">
-          <ChevronLeft size={13} />
-        </button>
-      </aside>
-    );
+    return null;
   }
 
   return (
@@ -497,9 +494,6 @@ function Inspector({
         <div className="inspector-actions">
           <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
             <RefreshCw size={15} />
-          </button>
-          <button className="edge-toggle inline-toggle" onClick={onToggle} title="Hide inspector">
-            <ChevronRight size={13} />
           </button>
         </div>
       </div>
