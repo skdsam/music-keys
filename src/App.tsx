@@ -1,6 +1,8 @@
 import {
   Activity,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Download,
   FileJson,
   FolderOpen,
@@ -101,6 +103,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [notice, setNotice] = useState("Open a folder to begin.");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const cancelRequested = useRef(false);
 
   const selected = useMemo(
@@ -311,7 +315,20 @@ function App() {
         </div>
       </header>
 
-      <section className="content-grid">
+      <section
+        className={`content-grid ${!isSidebarOpen ? "sidebar-collapsed" : ""} ${
+          !isInspectorOpen ? "inspector-collapsed" : ""
+        }`}
+      >
+        <aside className="rail left-rail">
+          <button
+            onClick={() => setIsSidebarOpen((value) => !value)}
+            title={isSidebarOpen ? "Hide filters" : "Show filters"}
+          >
+            {isSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+          </button>
+        </aside>
+
         <aside className="sidebar">
           <div className="stat-grid">
             <Metric label="Files" value={samples.length.toString()} />
@@ -402,7 +419,13 @@ function App() {
           </div>
         </section>
 
-        <Inspector sample={selected} onChange={updateSelected} onReanalyze={reanalyzeSelected} />
+        <Inspector
+          sample={selected}
+          isOpen={isInspectorOpen}
+          onToggle={() => setIsInspectorOpen((value) => !value)}
+          onChange={updateSelected}
+          onReanalyze={reanalyzeSelected}
+        />
       </section>
     </main>
   );
@@ -410,10 +433,14 @@ function App() {
 
 function Inspector({
   sample,
+  isOpen,
+  onToggle,
   onChange,
   onReanalyze
 }: {
   sample?: SampleRecord;
+  isOpen: boolean;
+  onToggle: () => void;
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
 }) {
@@ -449,6 +476,16 @@ function Inspector({
     setPlayProgress(ratio);
   };
 
+  if (!isOpen) {
+    return (
+      <aside className="rail right-rail">
+        <button onClick={onToggle} title="Show inspector">
+          <ChevronLeft size={16} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="inspector">
       <div className="inspector-header">
@@ -456,9 +493,14 @@ function Inspector({
           <h2>{sample?.fileName ?? "Inspector"}</h2>
           <p>{sample ? `${formatBytes(sample.fileSize)} - ${sample.extension.toUpperCase()}` : "Select a sample"}</p>
         </div>
-        <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
-          <RefreshCw size={16} />
-        </button>
+        <div className="inspector-actions">
+          <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
+            <RefreshCw size={15} />
+          </button>
+          <button onClick={onToggle} title="Hide inspector">
+            <ChevronRight size={15} />
+          </button>
+        </div>
       </div>
 
       <div className="wave-panel">
