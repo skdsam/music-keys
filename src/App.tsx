@@ -489,8 +489,8 @@ function Inspector({
   return (
     <aside className="inspector">
       <div className="inspector-header">
-        <div>
-          <h2>{sample?.fileName ?? "Inspector"}</h2>
+        <div className="inspector-title">
+          <h2 title={sample?.fileName}>{sample?.fileName ?? "Inspector"}</h2>
           <p>{sample ? `${formatBytes(sample.fileSize)} - ${sample.extension.toUpperCase()}` : "Select a sample"}</p>
         </div>
         <div className="inspector-actions">

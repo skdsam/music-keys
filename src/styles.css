@@ -144,20 +144,20 @@ button {
 
 .content-grid {
   display: grid;
-  grid-template-columns: 34px 220px minmax(520px, 1fr) 310px;
+  grid-template-columns: 28px 176px minmax(560px, 1fr) 270px;
   min-height: 0;
 }
 
 .content-grid.sidebar-collapsed {
-  grid-template-columns: 34px 0 minmax(520px, 1fr) 310px;
+  grid-template-columns: 28px 0 minmax(560px, 1fr) 270px;
 }
 
 .content-grid.inspector-collapsed {
-  grid-template-columns: 34px 220px minmax(520px, 1fr) 34px;
+  grid-template-columns: 28px 176px minmax(560px, 1fr) 28px;
 }
 
 .content-grid.sidebar-collapsed.inspector-collapsed {
-  grid-template-columns: 34px 0 minmax(520px, 1fr) 34px;
+  grid-template-columns: 28px 0 minmax(560px, 1fr) 28px;
 }
 
 .rail {
@@ -165,7 +165,7 @@ button {
   align-items: flex-start;
   justify-content: center;
   min-height: 0;
-  padding-top: 10px;
+  padding-top: 8px;
   border-right: 1px solid var(--line);
   background: rgba(251, 252, 253, 0.82);
 }
@@ -177,8 +177,8 @@ button {
 
 .rail button {
   display: grid;
-  width: 24px;
-  height: 28px;
+  width: 21px;
+  height: 26px;
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -190,7 +190,7 @@ button {
 .sidebar,
 .inspector {
   min-height: 0;
-  padding: 12px;
+  padding: 9px;
   border-right: 1px solid var(--line);
   background: rgba(251, 252, 253, 0.78);
 }
@@ -218,11 +218,11 @@ button {
 .stat-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px;
+  gap: 5px;
 }
 
 .metric {
-  padding: 9px 10px;
+  padding: 7px 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel-strong);
@@ -233,23 +233,23 @@ button {
 .candidate-line span,
 .confidence-row span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
 }
 
 .metric strong {
   display: block;
-  margin-top: 4px;
-  font-size: 16px;
+  margin-top: 2px;
+  font-size: 14px;
   letter-spacing: 0;
 }
 
 .search-box {
   display: flex;
   align-items: center;
-  height: 34px;
-  margin: 12px 0;
-  padding: 0 11px;
-  gap: 8px;
+  height: 30px;
+  margin: 9px 0;
+  padding: 0 8px;
+  gap: 6px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -263,6 +263,7 @@ button {
   outline: 0;
   color: var(--ink);
   background: transparent;
+  font-size: 12px;
 }
 
 .filters {
@@ -275,27 +276,28 @@ button {
 .table-tools {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .nav-heading {
-  padding: 0 4px 6px;
+  padding: 0 3px 4px;
 }
 
 .filters button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 30px;
-  padding: 0 9px;
+  height: 26px;
+  padding: 0 7px;
   border-radius: 8px;
   color: var(--ink);
   background: transparent;
   cursor: pointer;
+  font-size: 12px;
 }
 
 .filters button:hover,
@@ -310,14 +312,14 @@ button {
 .status-strip {
   display: flex;
   align-items: flex-start;
-  margin-top: 12px;
-  padding: 9px;
-  gap: 8px;
+  margin-top: 9px;
+  padding: 7px;
+  gap: 6px;
   border: 1px solid #d8e5e6;
   border-radius: 8px;
   color: var(--teal-dark);
   background: #edf8f7;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -326,7 +328,7 @@ button {
   grid-template-rows: auto 1fr;
   min-width: 0;
   min-height: 0;
-  padding: 12px;
+  padding: 10px;
 }
 
 .table-header {
@@ -371,7 +373,7 @@ button {
 
 .sample-row {
   display: grid;
-  grid-template-columns: minmax(260px, 2.2fr) minmax(96px, 0.8fr) minmax(76px, 0.62fr) minmax(62px, 0.48fr) minmax(58px, 0.45fr) minmax(92px, 0.58fr);
+  grid-template-columns: minmax(300px, 2.6fr) minmax(86px, 0.7fr) minmax(70px, 0.52fr) minmax(58px, 0.42fr) minmax(54px, 0.38fr) minmax(82px, 0.5fr);
   align-items: center;
   width: 100%;
   min-height: 44px;
@@ -487,31 +489,44 @@ button.sample-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 8px;
+  gap: 6px;
 }
 
 .inspector-header h2 {
-  display: -webkit-box;
+  display: block;
+  max-height: 4.8em;
+  overflow: auto;
+  color: #14181d;
+  font-size: 13px;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
   white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+}
+
+.inspector-title {
+  min-width: 0;
+}
+
+.inspector-title p {
+  margin-top: 3px;
 }
 
 .inspector-actions {
   display: flex;
-  gap: 5px;
+  gap: 4px;
 }
 
 .inspector-actions button,
 .inspector-header button {
-  width: 30px;
-  min-height: 30px;
+  width: 26px;
+  min-height: 26px;
   padding: 0;
 }
 
 .wave-panel {
-  margin-top: 10px;
-  padding: 9px;
+  margin-top: 8px;
+  padding: 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -522,8 +537,8 @@ button.sample-row {
   position: relative;
   align-items: center;
   width: 100%;
-  height: 88px;
-  padding: 8px 7px;
+  height: 68px;
+  padding: 6px;
   gap: 2px;
   overflow: hidden;
   border-radius: 8px;
@@ -581,20 +596,20 @@ button.sample-row {
 
 .audio-player {
   width: 100%;
-  height: 32px;
-  margin-top: 7px;
+  height: 28px;
+  margin-top: 5px;
 }
 
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px;
-  margin-top: 10px;
+  gap: 5px;
+  margin-top: 8px;
 }
 
 .detail {
   min-width: 0;
-  padding: 8px 9px;
+  padding: 6px 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -602,12 +617,12 @@ button.sample-row {
 
 .detail strong {
   display: block;
-  min-height: 18px;
-  margin-top: 3px;
+  min-height: 16px;
+  margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .edit-panel,
@@ -615,9 +630,9 @@ button.sample-row {
 .confidence-panel,
 .warnings {
   display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
@@ -625,24 +640,25 @@ button.sample-row {
 
 .edit-panel label {
   display: grid;
-  gap: 4px;
+  gap: 3px;
 }
 
 .edit-panel label span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
 .edit-panel input {
   width: 100%;
-  height: 30px;
-  padding: 0 9px;
+  height: 26px;
+  padding: 0 7px;
   border: 1px solid var(--line);
   border-radius: 8px;
   outline: 0;
   color: var(--ink);
   background: #fbfcfd;
+  font-size: 12px;
 }
 
 .edit-panel input:focus {
@@ -652,21 +668,23 @@ button.sample-row {
 
 .verify-button {
   width: 100%;
+  min-height: 29px;
   color: #ffffff;
   background: var(--green);
+  font-size: 12px;
 }
 
 .candidate-panel h3 {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .candidate-line,
 .confidence-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .candidate-line strong {
@@ -674,15 +692,15 @@ button.sample-row {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .confidence-row {
-  grid-template-columns: 42px minmax(0, 1fr) 36px;
+  grid-template-columns: 34px minmax(0, 1fr) 31px;
 }
 
 .confidence-track {
-  height: 8px;
+  height: 6px;
   overflow: hidden;
   border-radius: 999px;
   background: #e7ebef;
@@ -697,7 +715,7 @@ button.sample-row {
 
 .confidence-row strong {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   text-align: right;
 }
 
@@ -710,12 +728,12 @@ button.sample-row {
 .warnings p {
   margin: 0;
   color: inherit;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 @media (max-width: 1180px) {
   .content-grid {
-    grid-template-columns: 34px 200px minmax(420px, 1fr) 300px;
+    grid-template-columns: 28px 168px minmax(420px, 1fr) 260px;
   }
 
   .toolbar button span {
