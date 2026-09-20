@@ -848,7 +848,9 @@ function App() {
                         {isThisSampleAnalyzing && <Loader2 size={13} className="spin text-teal" />}
                         <strong>{sample.fileName}</strong>
                       </span>
-                      <small>{sample.folder}</small>
+                      {Boolean(sample.folder && sample.folder.trim() !== "" && sample.folder !== ".") && (
+                        <small>{sample.folder}</small>
+                      )}
                       {isThisSampleAnalyzing && (
                         <span className="row-progress-track">
                           <span

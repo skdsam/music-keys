@@ -143,6 +143,12 @@ pub fn upsert_sample(conn: &Connection, sample: &SampleRecord) -> Result<(), Str
     let mtime_i64 = sample.last_modified.map(|v| v as i64);
     let verified_int = if sample.verified.unwrap_or(false) { 1 } else { 0 };
 
+    let normalized_folder = if sample.folder == "." || sample.folder == "./" {
+        ""
+    } else {
+        sample.folder.as_str()
+    };
+
     conn.execute(
         "INSERT INTO samples (
             id, path, file_name, extension, folder, file_size, last_modified,
@@ -150,6 +156,7 @@ pub fn upsert_sample(conn: &Connection, sample: &SampleRecord) -> Result<(), Str
          )
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT(path) DO UPDATE SET
+            folder = excluded.folder,
             file_size = excluded.file_size,
             last_modified = excluded.last_modified,
             status = excluded.status;",
@@ -158,7 +165,7 @@ pub fn upsert_sample(conn: &Connection, sample: &SampleRecord) -> Result<(), Str
             sample.path,
             sample.file_name,
             sample.extension,
-            sample.folder,
+            normalized_folder,
             sample.file_size as i64,
             mtime_i64,
             sample.status,
@@ -226,7 +233,12 @@ pub fn load_all_samples(conn: &Connection) -> Result<Vec<SampleRecord>, String> 
             let path: String = row.get(1)?;
             let file_name: String = row.get(2)?;
             let extension: String = row.get(3)?;
-            let folder: String = row.get(4)?;
+            let folder_raw: String = row.get(4)?;
+            let folder = if folder_raw == "." || folder_raw == "./" {
+                "".to_string()
+            } else {
+                folder_raw
+            };
             let file_size: i64 = row.get(5)?;
             let last_modified: Option<i64> = row.get(6)?;
             let status: String = row.get(7)?;

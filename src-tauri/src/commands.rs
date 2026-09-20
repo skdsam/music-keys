@@ -283,19 +283,13 @@ fn sample_record(
         .and_then(|parent| parent.strip_prefix(root).ok())
         .map(|relative| {
             let value = relative.to_string_lossy().to_string();
-            if value.is_empty() {
-                ".".to_string()
+            if value.is_empty() || value == "." || value == "./" {
+                "".to_string()
             } else {
                 value
             }
         })
-        .unwrap_or_else(|| {
-            path.parent()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_str())
-                .unwrap_or(".")
-                .to_string()
-        });
+        .unwrap_or_default();
 
     Ok(SampleRecord {
         id: format!("{:x}", hasher.finish()),
