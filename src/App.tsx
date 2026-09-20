@@ -1300,7 +1300,11 @@ function Inspector({
             onChange={(event) => onChange({ userPitch: event.target.value, verified: false })}
           />
         </label>
-        <button className="verify-button" disabled={!sample} onClick={() => onChange({ verified: true })}>
+        <button
+          className={`verify-button ${sample?.verified ? "is-verified" : ""}`}
+          disabled={!sample}
+          onClick={() => onChange({ verified: true })}
+        >
           <CheckCircle2 size={17} />
           <span>{sample?.verified ? "Verified" : "Mark verified"}</span>
         </button>
@@ -1396,7 +1400,14 @@ function ConfidenceBadge({
       </span>
     );
   }
-  if (sample.verified) return <span className="badge verified">Verified</span>;
+  if (sample.verified) {
+    return (
+      <span className="badge verified">
+        <Check size={11} strokeWidth={2.6} />
+        <span>Verified</span>
+      </span>
+    );
+  }
 
   const analysis = sample.analysis;
   const confidence = Math.max(

@@ -1078,10 +1078,16 @@ button.sample-row {
   font-weight: 700;
 }
 
-.badge.high,
-.badge.verified {
+.badge.high {
   color: #ffffff;
   background: var(--green);
+}
+
+.badge.verified {
+  color: #ffffff;
+  background: #7c3aed;
+  box-shadow: 0 1px 4px rgba(124, 58, 237, 0.3);
+  gap: 3px;
 }
 
 .badge.medium,
@@ -1563,6 +1569,18 @@ button.sample-row {
 .verify-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.verify-button.is-verified {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.28);
+}
+
+.verify-button.is-verified:hover:not(:disabled) {
+  background: #6d28d9;
+  border-color: #6d28d9;
+  filter: none;
 }
 
 .candidate-panel h3 {
