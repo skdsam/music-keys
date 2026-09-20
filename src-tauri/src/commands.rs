@@ -310,6 +310,7 @@ fn sample_record(
         user_scale: None,
         user_bpm: None,
         user_pitch: None,
+        is_missing: Some(false),
     })
 }
 
@@ -319,6 +320,94 @@ fn format_float(value: f32) -> String {
     } else {
         format!("{value:.2}")
     }
+}
+
+#[tauri::command]
+pub fn relocate_sample(
+    app: tauri::AppHandle,
+    id: String,
+    new_path: String,
+) -> Result<SampleRecord, String> {
+    let p = Path::new(&new_path);
+    if !p.is_file() {
+        return Err(format!("The selected file does not exist: {new_path}"));
+    }
+
+    let extension = p
+        .extension()
+        .and_then(|v| v.to_str())
+        .map(|v| v.to_ascii_lowercase())
+        .unwrap_or_default();
+
+    if !AUDIO_EXTENSIONS.contains(&extension.as_str()) {
+        return Err("Selected file is not a supported audio format".to_string());
+    }
+
+    let metadata = fs::metadata(p).map_err(|e| format!("Failed to read metadata: {e}"))?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs());
+
+    let file_name = p
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
+
+    let folder = p
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    let file_size = metadata.len();
+
+    let conn = db::open_db(&app)?;
+    db::relocate_sample_path(
+        &conn,
+        &id,
+        &new_path,
+        &file_name,
+        &extension,
+        file_size,
+        modified,
+        &folder,
+    )?;
+
+    // Check if we have cached analysis for this file
+    let cached_analysis = db::get_cached_analysis(&conn, &new_path, file_size, modified);
+    let status = if cached_analysis.is_some() {
+        "done".to_string()
+    } else {
+        "queued".to_string()
+    };
+
+    Ok(SampleRecord {
+        id,
+        path: new_path,
+        file_name,
+        extension,
+        folder,
+        file_size,
+        last_modified: modified,
+        status,
+        analysis: cached_analysis,
+        verified: Some(false),
+        user_key: None,
+        user_scale: None,
+        user_bpm: None,
+        user_pitch: None,
+        is_missing: Some(false),
+    })
+}
+
+#[tauri::command]
+pub fn remove_sample(app: tauri::AppHandle, id: String, path: String) -> Result<(), String> {
+    let conn = db::open_db(&app)?;
+    db::delete_sample(&conn, &id, &path)
 }
 
 #[tauri::command]
@@ -383,5 +472,6 @@ pub fn open_file_location(path: String) -> Result<(), String> {
         Err("Unsupported operating system".to_string())
     }
 }
+
 
 

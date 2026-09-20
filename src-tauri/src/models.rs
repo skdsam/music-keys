@@ -17,6 +17,7 @@ pub struct SampleRecord {
     pub user_scale: Option<String>,
     pub user_bpm: Option<String>,
     pub user_pitch: Option<String>,
+    pub is_missing: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

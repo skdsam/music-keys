@@ -274,21 +274,78 @@ pub fn load_all_samples(conn: &Connection) -> Result<Vec<SampleRecord>, String> 
                 user_scale,
                 user_bpm,
                 user_pitch,
+                is_missing: None,
             })
         })
         .map_err(|err| format!("Failed to execute query: {err}"))?;
 
     let mut samples = Vec::new();
     for row in rows {
-        if let Ok(sample) = row {
-            // Only include sample if it still exists on disk
-            if Path::new(&sample.path).exists() {
-                samples.push(sample);
-            }
+        if let Ok(mut sample) = row {
+            let missing = !Path::new(&sample.path).exists();
+            sample.is_missing = Some(missing);
+            samples.push(sample);
         }
     }
 
     Ok(samples)
+}
+
+pub fn relocate_sample_path(
+    conn: &Connection,
+    id: &str,
+    new_path: &str,
+    new_file_name: &str,
+    new_extension: &str,
+    new_file_size: u64,
+    new_modified: Option<u64>,
+    new_folder: &str,
+) -> Result<(), String> {
+    let mtime_i64 = new_modified.map(|v| v as i64);
+
+    let old_path: Option<String> = conn
+        .query_row("SELECT path FROM samples WHERE id = ?1", params![id], |row| row.get(0))
+        .optional()
+        .map_err(|err| format!("Failed to find sample {id}: {err}"))?;
+
+    conn.execute(
+        "UPDATE samples SET
+            path = ?1,
+            file_name = ?2,
+            extension = ?3,
+            file_size = ?4,
+            last_modified = ?5,
+            folder = ?6
+         WHERE id = ?7;",
+        params![
+            new_path,
+            new_file_name,
+            new_extension,
+            new_file_size as i64,
+            mtime_i64,
+            new_folder,
+            id
+        ],
+    )
+    .map_err(|err| format!("Failed to update sample record for relocation: {err}"))?;
+
+    if let Some(old) = old_path {
+        let _ = conn.execute(
+            "UPDATE analysis_cache SET path = ?1, file_size = ?2, last_modified = ?3 WHERE path = ?4;",
+            params![new_path, new_file_size as i64, mtime_i64, old],
+        );
+    }
+
+    Ok(())
+}
+
+pub fn delete_sample(conn: &Connection, id: &str, path: &str) -> Result<(), String> {
+    conn.execute("DELETE FROM samples WHERE id = ?1;", params![id])
+        .map_err(|err| format!("Failed to delete sample from database: {err}"))?;
+
+    let _ = conn.execute("DELETE FROM analysis_cache WHERE path = ?1;", params![path]);
+
+    Ok(())
 }
 
 pub fn clear_all(conn: &Connection) -> Result<(), String> {
@@ -375,6 +432,7 @@ mod tests {
             user_scale: None,
             user_bpm: None,
             user_pitch: None,
+            is_missing: None,
         };
 
         upsert_sample(&conn, &sample).unwrap();

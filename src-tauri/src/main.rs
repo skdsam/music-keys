@@ -18,6 +18,8 @@ pub fn run() {
             commands::analyze_sample,
             commands::export_results,
             commands::open_file_location,
+            commands::relocate_sample,
+            commands::remove_sample,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Sample Key Studio");

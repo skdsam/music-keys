@@ -26,7 +26,8 @@ import {
   FolderSearch,
   Palette,
   Check,
-  GripVertical
+  GripVertical,
+  RotateCcw
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -89,6 +90,7 @@ type SampleRecord = {
   userScale?: string;
   userBpm?: string;
   userPitch?: string;
+  isMissing?: boolean;
 };
 
 type FilterKey = "all" | "review" | "loops" | "oneshots" | "tonal" | "unknown" | "verified";
@@ -223,6 +225,10 @@ function App() {
   const [folderPath, setFolderPath] = useState<string>("");
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [query, setQuery] = useState("");
+  const [selectedKeyFilter, setSelectedKeyFilter] = useState<string>("all");
+  const [selectedPitchFilter, setSelectedPitchFilter] = useState<string>("all");
+  const [minBpmFilter, setMinBpmFilter] = useState<string>("");
+  const [maxBpmFilter, setMaxBpmFilter] = useState<string>("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPausing, setIsPausing] = useState(false);
   const [activeAnalysis, setActiveAnalysis] = useState<ActiveAnalysis | null>(null);
@@ -337,39 +343,124 @@ function App() {
     return { analyzed, review, verified };
   }, [samples]);
 
+  const availableKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const sample of samples) {
+      const key = sample.userKey || sample.analysis?.key;
+      if (key && key.trim() !== "") {
+        set.add(key.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [samples]);
+
+  const availablePitches = useMemo(() => {
+    const set = new Set<string>();
+    for (const sample of samples) {
+      const pitch = sample.userPitch || sample.analysis?.pitchNote;
+      if (pitch && pitch.trim() !== "") {
+        set.add(pitch.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [samples]);
+
+  const isAnyFilterActive = useMemo(() => {
+    return (
+      activeFilter !== "all" ||
+      query.trim() !== "" ||
+      selectedKeyFilter !== "all" ||
+      selectedPitchFilter !== "all" ||
+      minBpmFilter.trim() !== "" ||
+      maxBpmFilter.trim() !== ""
+    );
+  }, [activeFilter, query, selectedKeyFilter, selectedPitchFilter, minBpmFilter, maxBpmFilter]);
+
+  const resetAllFilters = () => {
+    setActiveFilter("all");
+    setQuery("");
+    setSelectedKeyFilter("all");
+    setSelectedPitchFilter("all");
+    setMinBpmFilter("");
+    setMaxBpmFilter("");
+  };
+
   const filteredSamples = useMemo(() => {
     const search = query.trim().toLowerCase();
+    const minBpm = minBpmFilter ? parseFloat(minBpmFilter) : null;
+    const maxBpm = maxBpmFilter ? parseFloat(maxBpmFilter) : null;
 
     return samples.filter((sample) => {
       const analysis = sample.analysis;
       const type = analysis?.sampleType.toLowerCase() ?? "";
+      const sampleKey = (sample.userKey || analysis?.key || "").toLowerCase();
+      const sampleScale = (sample.userScale || analysis?.scale || "").toLowerCase();
+      const fullKey = sampleScale ? `${sampleKey} ${sampleScale}` : sampleKey;
+      const samplePitch = (sample.userPitch || analysis?.pitchNote || "").toLowerCase();
+      const sampleBpm = sample.userBpm ? parseFloat(sample.userBpm) : analysis?.bpm ?? null;
+
       const matchesSearch =
         !search ||
         sample.fileName.toLowerCase().includes(search) ||
         sample.folder.toLowerCase().includes(search) ||
-        (analysis?.key ?? "").toLowerCase().includes(search) ||
-        (analysis?.pitchNote ?? "").toLowerCase().includes(search);
+        sampleKey.includes(search) ||
+        samplePitch.includes(search);
 
       if (!matchesSearch) return false;
 
       switch (activeFilter) {
         case "review":
-          return needsReview(sample);
+          if (!needsReview(sample)) return false;
+          break;
         case "loops":
-          return type.includes("loop");
+          if (!type.includes("loop")) return false;
+          break;
         case "oneshots":
-          return type.includes("one-shot");
+          if (!type.includes("one-shot")) return false;
+          break;
         case "tonal":
-          return type.includes("tonal") || Boolean(analysis?.key || analysis?.pitchNote);
+          if (!type.includes("tonal") && !sampleKey && !samplePitch) return false;
+          break;
         case "unknown":
-          return type.includes("unknown") || sample.status === "error";
+          if (!type.includes("unknown") && sample.status !== "error") return false;
+          break;
         case "verified":
-          return Boolean(sample.verified);
-        default:
-          return true;
+          if (!sample.verified) return false;
+          break;
       }
+
+      if (selectedKeyFilter !== "all") {
+        const targetKey = selectedKeyFilter.toLowerCase();
+        if (!sampleKey.includes(targetKey) && !fullKey.includes(targetKey)) {
+          return false;
+        }
+      }
+
+      if (selectedPitchFilter !== "all") {
+        const targetPitch = selectedPitchFilter.toLowerCase();
+        if (!samplePitch.includes(targetPitch)) {
+          return false;
+        }
+      }
+
+      if (minBpm !== null && !isNaN(minBpm)) {
+        if (sampleBpm === null || sampleBpm < minBpm) return false;
+      }
+      if (maxBpm !== null && !isNaN(maxBpm)) {
+        if (sampleBpm === null || sampleBpm > maxBpm) return false;
+      }
+
+      return true;
     });
-  }, [activeFilter, query, samples]);
+  }, [
+    activeFilter,
+    query,
+    samples,
+    selectedKeyFilter,
+    selectedPitchFilter,
+    minBpmFilter,
+    maxBpmFilter
+  ]);
 
   const [loadedSources, setLoadedSources] = useState<string[]>([]);
 
@@ -685,23 +776,66 @@ function App() {
     }).catch((err) => console.error("Failed to persist metadata:", err));
   };
 
+  const handleRelocateSample = async (sample: SampleRecord) => {
+    try {
+      const selectedPath = await open({
+        multiple: false,
+        directory: false,
+        title: `Locate file for "${sample.fileName}"`,
+        filters: [
+          {
+            name: "Audio Files",
+            extensions: ["wav", "wave", "aif", "aiff", "flac", "mp3", "ogg", "m4a", "aac"],
+          },
+        ],
+      });
+
+      if (!selectedPath || Array.isArray(selectedPath)) return;
+
+      const updated = await invoke<SampleRecord>("relocate_sample", {
+        id: sample.id,
+        newPath: selectedPath,
+      });
+
+      setSamples((current) =>
+        current.map((item) =>
+          item.id === sample.id ? { ...item, ...updated, isMissing: false } : item
+        )
+      );
+      setNotice(`Relocated ${sample.fileName} to ${selectedPath}`);
+    } catch (err) {
+      console.error("Failed to relocate sample:", err);
+      setNotice(`Failed to relocate: ${String(err)}`);
+    }
+  };
+
+  const handleRemoveSample = async (sample: SampleRecord) => {
+    try {
+      await invoke("remove_sample", {
+        id: sample.id,
+        path: sample.path,
+      });
+
+      setSamples((current) => {
+        const remaining = current.filter((item) => item.id !== sample.id);
+        if (selectedId === sample.id) {
+          setSelectedId(remaining[0]?.id ?? null);
+        }
+        return remaining;
+      });
+      setNotice(`Removed ${sample.fileName} from library.`);
+    } catch (err) {
+      console.error("Failed to remove sample:", err);
+      setNotice(`Failed to remove: ${String(err)}`);
+    }
+  };
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
           <div className="brand-info">
             <h1>Sample Key Studio</h1>
-            <p title={loadedSources.join("; ") || folderPath || notice}>
-              {samples.length > 0
-                ? `${samples.length} samples ${
-                    loadedSources.length > 1
-                      ? `(${loadedSources.length} folders)`
-                      : folderPath
-                      ? `(${folderPath})`
-                      : ""
-                  } - ${notice}`
-                : notice}
-            </p>
           </div>
         </div>
 
@@ -979,6 +1113,82 @@ function App() {
             ))}
           </nav>
 
+          <div className="attribute-filters">
+            <div className="attr-filter-header">
+              <div className="nav-heading">
+                <SlidersHorizontal size={13} />
+                <span>Attributes</span>
+              </div>
+              {isAnyFilterActive && (
+                <button
+                  type="button"
+                  className="reset-filters-btn"
+                  onClick={resetAllFilters}
+                  title="Reset all filters and search"
+                >
+                  <RotateCcw size={11} />
+                  <span>Reset</span>
+                </button>
+              )}
+            </div>
+
+            <div className="attr-filter-row">
+              <span>Key</span>
+              <select
+                className="attr-filter-select"
+                value={selectedKeyFilter}
+                onChange={(e) => setSelectedKeyFilter(e.target.value)}
+              >
+                <option value="all">All Keys</option>
+                {availableKeys.map((key) => (
+                  <option key={key} value={key}>
+                    {key}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="attr-filter-row">
+              <span>Pitch</span>
+              <select
+                className="attr-filter-select"
+                value={selectedPitchFilter}
+                onChange={(e) => setSelectedPitchFilter(e.target.value)}
+              >
+                <option value="all">All Pitches</option>
+                {availablePitches.map((pitch) => (
+                  <option key={pitch} value={pitch}>
+                    {pitch}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="attr-filter-row">
+              <span>BPM Range</span>
+              <div className="bpm-filter-inputs">
+                <div className="bpm-input-wrap">
+                  <span>Min</span>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={minBpmFilter}
+                    onChange={(e) => setMinBpmFilter(e.target.value)}
+                  />
+                </div>
+                <div className="bpm-input-wrap">
+                  <span>Max</span>
+                  <input
+                    type="number"
+                    placeholder="999"
+                    value={maxBpmFilter}
+                    onChange={(e) => setMaxBpmFilter(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="status-strip">
             <Activity size={15} />
             <span>{notice}</span>
@@ -1051,7 +1261,11 @@ function App() {
           <div className="table-header">
             <div>
               <h2>Library</h2>
-              <p>{filteredSamples.length} visible samples</p>
+              <p title={notice}>
+                {filteredSamples.length} visible {filteredSamples.length === 1 ? "sample" : "samples"}
+                {filteredSamples.length !== samples.length && ` (of ${samples.length})`}
+                {notice ? ` • ${notice}` : ""}
+              </p>
             </div>
             <div className="table-tools">
               <Table2 size={16} />
@@ -1076,19 +1290,19 @@ function App() {
                     key={sample.id}
                     className={`sample-row ${selected?.id === sample.id ? "selected" : ""} ${
                       isThisSampleAnalyzing ? "analyzing-active" : ""
-                    }`}
+                    } ${sample.isMissing ? "is-missing" : ""}`}
                     onClick={() => setSelectedId(sample.id)}
-                    draggable="true"
-                    onDragStart={(e) => handleDragSample(sample.path, e)}
+                    draggable={!sample.isMissing}
+                    onDragStart={(e) => !sample.isMissing && handleDragSample(sample.path, e)}
                     role="row"
                   >
                     <span className="file-cell">
                       <span className="file-title-line">
                         <span
                           className="drag-handle"
-                          draggable="true"
-                          onDragStart={(e) => handleDragSample(sample.path, e)}
-                          title={`Drag ${sample.fileName} into DAW or desktop`}
+                          draggable={!sample.isMissing}
+                          onDragStart={(e) => !sample.isMissing && handleDragSample(sample.path, e)}
+                          title={sample.isMissing ? "File not located on disk" : `Drag ${sample.fileName} into DAW or desktop`}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <GripVertical size={13} />
@@ -1109,7 +1323,12 @@ function App() {
                       )}
                     </span>
                     <span>
-                      {isThisSampleAnalyzing ? (
+                      {sample.isMissing ? (
+                        <span className="badge missing" title="File not located at saved path">
+                          <AlertTriangle size={11} />
+                          <span>Missing</span>
+                        </span>
+                      ) : isThisSampleAnalyzing ? (
                         <span className="badge active analyzing-cell-badge">
                           <Loader2 size={11} className="spin" />
                           <span>{activeAnalysis.filePercent}%</span>
@@ -1151,6 +1370,8 @@ function App() {
           onReanalyze={reanalyzeSelected}
           onOpenFileLocation={openFileLocation}
           onDragSample={handleDragSample}
+          onRelocateSample={handleRelocateSample}
+          onRemoveSample={handleRemoveSample}
         />
       </section>
     </main>
@@ -1164,7 +1385,9 @@ function Inspector({
   onChange,
   onReanalyze,
   onOpenFileLocation,
-  onDragSample
+  onDragSample,
+  onRelocateSample,
+  onRemoveSample,
 }: {
   sample?: SampleRecord;
   isOpen: boolean;
@@ -1173,6 +1396,8 @@ function Inspector({
   onReanalyze: () => void;
   onOpenFileLocation?: (path?: string) => void;
   onDragSample?: (path: string, event: DragEvent) => void;
+  onRelocateSample?: (sample: SampleRecord) => void;
+  onRemoveSample?: (sample: SampleRecord) => void;
 }) {
   const audioSrc = sample ? convertFileSrc(sample.path) : "";
   const analysis = sample?.analysis;
@@ -1243,6 +1468,41 @@ function Inspector({
         </div>
       </div>
 
+      {sample?.isMissing && (
+        <div className="missing-file-alert">
+          <div className="missing-file-header">
+            <AlertTriangle size={15} />
+            <span>File Not Located</span>
+          </div>
+          <p className="missing-file-desc">
+            This audio file could not be found at its saved location. It may have been moved, renamed, or deleted.
+          </p>
+          <div className="missing-file-path" title={sample.path}>
+            {sample.path}
+          </div>
+          <div className="missing-file-actions">
+            <button
+              type="button"
+              className="locate-file-btn"
+              onClick={() => onRelocateSample?.(sample)}
+              title="Point to the file's current location on disk"
+            >
+              <FolderSearch size={13} />
+              <span>Locate File...</span>
+            </button>
+            <button
+              type="button"
+              className="remove-file-btn"
+              onClick={() => onRemoveSample?.(sample)}
+              title="Remove this missing sample from library"
+            >
+              <Trash2 size={13} />
+              <span>Remove</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {activeAnalysis && sample && activeAnalysis.sampleId === sample.id && (
         <div className="inspector-analyzing-card">
           <div className="inspector-analyzing-card-head">
@@ -1264,11 +1524,15 @@ function Inspector({
           className="waveform-view"
           type="button"
           onClick={seekWaveform}
-          disabled={!sample || !analysis?.waveform?.length}
+          disabled={!sample || sample.isMissing || !analysis?.waveform?.length}
           aria-label="Seek sample waveform"
-          title="Click waveform to seek"
+          title={sample?.isMissing ? "File not located" : "Click waveform to seek"}
         >
-          {analysis?.waveform?.length ? (
+          {sample?.isMissing ? (
+            <div className="wave-placeholder">
+              <span>File not located</span>
+            </div>
+          ) : analysis?.waveform?.length ? (
             analysis.waveform.map((value, index) => (
               <span className="wave-bar" key={index} style={{ height: `${Math.max(7, value * 100)}%` }} />
             ))
@@ -1277,11 +1541,11 @@ function Inspector({
               <AudioWaveform size={28} />
             </div>
           )}
-          {sample && analysis?.waveform?.length ? (
+          {sample && !sample.isMissing && analysis?.waveform?.length ? (
             <i className="playhead" style={{ left: `${playProgress * 100}%` }} />
           ) : null}
         </button>
-        {sample && (
+        {sample && !sample.isMissing && (
           <audio
             ref={audioRef}
             className="audio-player"
@@ -1291,6 +1555,9 @@ function Inspector({
             onTimeUpdate={syncProgress}
             onSeeked={syncProgress}
             onEnded={() => setPlayProgress(0)}
+            onError={() => {
+              onChange({ isMissing: true });
+            }}
           >
             <track kind="captions" />
           </audio>
@@ -1311,35 +1578,37 @@ function Inspector({
           <SlidersHorizontal size={16} />
           <span>Metadata</span>
         </div>
-        <label>
-          <span>Key</span>
-          <input
-            value={sample?.userKey ?? analysis?.key ?? ""}
-            onChange={(event) => onChange({ userKey: event.target.value, verified: false })}
-          />
-        </label>
-        <label>
-          <span>Scale</span>
-          <input
-            value={sample?.userScale ?? analysis?.scale ?? ""}
-            onChange={(event) => onChange({ userScale: event.target.value, verified: false })}
-          />
-        </label>
-        <label>
-          <span>BPM</span>
-          <input
-            inputMode="decimal"
-            value={sample?.userBpm ?? numberText(analysis?.bpm)}
-            onChange={(event) => onChange({ userBpm: event.target.value, verified: false })}
-          />
-        </label>
-        <label>
-          <span>Pitch</span>
-          <input
-            value={sample?.userPitch ?? analysis?.pitchNote ?? ""}
-            onChange={(event) => onChange({ userPitch: event.target.value, verified: false })}
-          />
-        </label>
+        <div className="edit-grid">
+          <label>
+            <span>Key</span>
+            <input
+              value={sample?.userKey ?? analysis?.key ?? ""}
+              onChange={(event) => onChange({ userKey: event.target.value, verified: false })}
+            />
+          </label>
+          <label>
+            <span>Scale</span>
+            <input
+              value={sample?.userScale ?? analysis?.scale ?? ""}
+              onChange={(event) => onChange({ userScale: event.target.value, verified: false })}
+            />
+          </label>
+          <label>
+            <span>BPM</span>
+            <input
+              inputMode="decimal"
+              value={sample?.userBpm ?? numberText(analysis?.bpm)}
+              onChange={(event) => onChange({ userBpm: event.target.value, verified: false })}
+            />
+          </label>
+          <label>
+            <span>Pitch</span>
+            <input
+              value={sample?.userPitch ?? analysis?.pitchNote ?? ""}
+              onChange={(event) => onChange({ userPitch: event.target.value, verified: false })}
+            />
+          </label>
+        </div>
         <button
           className={`verify-button ${sample?.verified ? "is-verified" : ""}`}
           disabled={!sample}
