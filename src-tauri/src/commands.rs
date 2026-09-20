@@ -331,13 +331,31 @@ pub fn open_file_location(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
         let windows_path = path.replace('/', "\\");
-        std::process::Command::new("explorer")
-            .arg(format!("/select,{}", windows_path))
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| format!("Failed to open file in Explorer: {e}"))?;
+
+        // Format argument: for files, /select,"path"; for directories, "path"
+        let arg = if p.is_file() {
+            format!("/select,\"{windows_path}\"")
+        } else {
+            format!("\"{windows_path}\"")
+        };
+
+        // Note: Do NOT use CREATE_NO_WINDOW because explorer.exe is a GUI application.
+        // Use raw_arg so Rust does not wrap /select,"..." in extra outer quotes.
+        let spawn_result = std::process::Command::new("explorer")
+            .raw_arg(&arg)
+            .spawn();
+
+        if let Err(err) = spawn_result {
+            // Fallback: try opening parent folder directly
+            if let Some(parent) = p.parent() {
+                let parent_str = parent.to_string_lossy().replace('/', "\\");
+                let _ = std::process::Command::new("explorer")
+                    .raw_arg(format!("\"{parent_str}\""))
+                    .spawn();
+            }
+            return Err(format!("Failed to open Explorer: {err}"));
+        }
         Ok(())
     }
 
@@ -365,4 +383,5 @@ pub fn open_file_location(path: String) -> Result<(), String> {
         Err("Unsupported operating system".to_string())
     }
 }
+
 

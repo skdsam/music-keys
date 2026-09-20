@@ -23,7 +23,6 @@ import {
   Trash2,
   ChevronDown,
   AlertTriangle,
-  ExternalLink,
   FolderSearch,
   Palette,
   Check
@@ -127,7 +126,18 @@ const formatBytes = (bytes: number) => {
 
 const formatPercent = (value?: number) => `${Math.round((value ?? 0) * 100)}%`;
 
-type ThemeKey = "dark" | "light" | "cyberpunk" | "analog" | "slate";
+type ThemeKey =
+  | "dark"
+  | "light"
+  | "cyberpunk"
+  | "analog"
+  | "slate"
+  | "dracula"
+  | "nord"
+  | "monokai"
+  | "solarized"
+  | "emerald"
+  | "sunset";
 
 interface ThemeOption {
   key: ThemeKey;
@@ -167,6 +177,42 @@ const THEMES: ThemeOption[] = [
     desc: "Monochrome graphite & ice blue",
     previewColors: ["#0f1115", "#1d212b", "#38bdf8"],
   },
+  {
+    key: "dracula",
+    label: "Dracula",
+    desc: "Gothic lilac & soft violet",
+    previewColors: ["#1e1f29", "#282a36", "#bd93f9"],
+  },
+  {
+    key: "nord",
+    label: "Nord Frost",
+    desc: "Arctic polar night & glacier frost",
+    previewColors: ["#242933", "#2e3440", "#88c0d0"],
+  },
+  {
+    key: "monokai",
+    label: "Monokai Pro",
+    desc: "Charcoal espresso & chartreuse lime",
+    previewColors: ["#19181a", "#2a262a", "#a9dc76"],
+  },
+  {
+    key: "solarized",
+    label: "Solarized Deep",
+    desc: "Abyssal oceanic teal & amber",
+    previewColors: ["#001e26", "#073642", "#2aa198"],
+  },
+  {
+    key: "emerald",
+    label: "Emerald Matrix",
+    desc: "Stealth forest & vivid emerald",
+    previewColors: ["#090e0b", "#16241a", "#10b981"],
+  },
+  {
+    key: "sunset",
+    label: "Crimson Sunset",
+    desc: "Twilight aubergine & vibrant coral",
+    previewColors: ["#140d17", "#26162d", "#f43f5e"],
+  },
 ];
 
 function App() {
@@ -181,16 +227,31 @@ function App() {
   const [notice, setNotice] = useState("Open a folder to begin.");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const cancelRequested = useRef(false);
+  const importMenuRef = useRef<HTMLDivElement | null>(null);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [theme, setTheme] = useState<ThemeKey>(() => {
     const saved = localStorage.getItem("sample_studio_theme") as ThemeKey | null;
-    return saved && ["dark", "light", "cyberpunk", "analog", "slate"].includes(saved) ? saved : "dark";
+    const validThemes: ThemeKey[] = [
+      "dark",
+      "light",
+      "cyberpunk",
+      "analog",
+      "slate",
+      "dracula",
+      "nord",
+      "monokai",
+      "solarized",
+      "emerald",
+      "sunset",
+    ];
+    return saved && validThemes.includes(saved) ? saved : "dark";
   });
 
   useEffect(() => {
@@ -200,6 +261,9 @@ function App() {
 
   useEffect(() => {
     const handleClickOutside = (event: globalThis.MouseEvent) => {
+      if (importMenuRef.current && !importMenuRef.current.contains(event.target as Node)) {
+        setIsImportMenuOpen(false);
+      }
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
         setIsExportMenuOpen(false);
       }
@@ -207,13 +271,13 @@ function App() {
         setIsThemeMenuOpen(false);
       }
     };
-    if (isExportMenuOpen || isThemeMenuOpen) {
+    if (isImportMenuOpen || isExportMenuOpen || isThemeMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isExportMenuOpen, isThemeMenuOpen]);
+  }, [isImportMenuOpen, isExportMenuOpen, isThemeMenuOpen]);
 
   const openFileLocation = async (filePath?: string) => {
     if (!filePath) return;
@@ -611,10 +675,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <div className="brand-mark">
-            <AudioWaveform size={22} />
-          </div>
-          <div>
+          <div className="brand-info">
             <h1>Sample Key Studio</h1>
             <p title={loadedSources.join("; ") || folderPath || notice}>
               {samples.length > 0
@@ -631,146 +692,196 @@ function App() {
         </div>
 
         <div className="toolbar">
-          <button className="primary" onClick={openFolder} title="Open folder (replaces library)">
-            <FolderOpen size={17} />
-            <span>Open</span>
-          </button>
-          <button onClick={addFolder} title="Add another folder to library">
-            <FolderPlus size={17} />
-            <span>Add Folder</span>
-          </button>
-          <button onClick={addFiles} title="Add audio sample files to library">
-            <FilePlus size={17} />
-            <span>Add Files</span>
-          </button>
-          <button onClick={analyzeAll} disabled={!samples.length || isAnalyzing} title="Analyze unanalyzed samples">
-            {isAnalyzing && !isPausing ? <Loader2 size={17} className="spin text-teal" /> : <Sparkles size={17} />}
-            <span>Analyze</span>
-          </button>
-          <button onClick={pauseAnalysis} disabled={!isAnalyzing || isPausing} title="Pause analysis">
-            {isPausing ? <Loader2 size={17} className="spin" /> : <PauseCircle size={17} />}
-            <span>{isPausing ? "Pausing..." : "Pause"}</span>
-          </button>
-
-          <div className="dropdown-wrapper" ref={exportMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsExportMenuOpen((prev) => !prev)}
-              disabled={!samples.length}
-              title="Export sample metadata"
-              className={isExportMenuOpen ? "active" : ""}
-            >
-              <Download size={16} />
-              <span>Export</span>
-              <ChevronDown size={14} className={isExportMenuOpen ? "rotate-180" : ""} />
-            </button>
-            {isExportMenuOpen && (
-              <div className="dropdown-menu">
-                <button
-                  type="button"
-                  className="dropdown-item"
-                  onClick={() => {
-                    setIsExportMenuOpen(false);
-                    exportSamples("csv");
-                  }}
-                >
-                  <Download size={15} />
-                  <div className="dropdown-item-text">
-                    <strong>Export CSV (.csv)</strong>
-                    <small>Spreadsheet with BPM, key, scale & pitches</small>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className="dropdown-item"
-                  onClick={() => {
-                    setIsExportMenuOpen(false);
-                    exportSamples("json");
-                  }}
-                >
-                  <FileJson size={15} />
-                  <div className="dropdown-item-text">
-                    <strong>Export JSON (.json)</strong>
-                    <small>Structured audio metadata & waveforms</small>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Theme Selector Menu */}
-          <div className="dropdown-wrapper" ref={themeMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsThemeMenuOpen((prev) => !prev)}
-              title="Change UI Theme"
-              className={isThemeMenuOpen ? "active" : ""}
-            >
-              <Palette size={16} />
-              <span>Theme</span>
-              <ChevronDown size={14} className={isThemeMenuOpen ? "rotate-180" : ""} />
-            </button>
-            {isThemeMenuOpen && (
-              <div className="dropdown-menu theme-menu">
-                <div className="menu-heading">UI Theme</div>
-                {THEMES.map((item) => (
+          <div className="toolbar-actions">
+            {/* Open / Import Dropdown Menu */}
+            <div className="dropdown-wrapper" ref={importMenuRef}>
+              <button
+                type="button"
+                className={`primary ${isImportMenuOpen ? "active" : ""}`}
+                onClick={() => setIsImportMenuOpen((prev) => !prev)}
+                title="Open or add audio samples to library"
+              >
+                <FolderOpen size={16} />
+                <span>Open</span>
+                <ChevronDown size={14} className={isImportMenuOpen ? "rotate-180" : ""} />
+              </button>
+              {isImportMenuOpen && (
+                <div className="dropdown-menu align-left">
+                  <div className="menu-heading">Library Sources</div>
                   <button
-                    key={item.key}
                     type="button"
-                    className={`dropdown-item theme-item ${theme === item.key ? "selected" : ""}`}
+                    className="dropdown-item"
                     onClick={() => {
-                      setTheme(item.key);
-                      setIsThemeMenuOpen(false);
+                      setIsImportMenuOpen(false);
+                      openFolder();
                     }}
                   >
-                    <div className="theme-swatch">
-                      <span style={{ background: item.previewColors[0] }} />
-                      <span style={{ background: item.previewColors[1] }} />
-                      <span style={{ background: item.previewColors[2] }} />
-                    </div>
+                    <FolderOpen size={16} />
                     <div className="dropdown-item-text">
-                      <strong>{item.label}</strong>
-                      <small>{item.desc}</small>
+                      <strong>Open Folder...</strong>
+                      <small>Replace library with selected folder</small>
                     </div>
-                    {theme === item.key && <Check size={14} className="theme-check-icon" />}
                   </button>
-                ))}
-              </div>
-            )}
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setIsImportMenuOpen(false);
+                      addFolder();
+                    }}
+                  >
+                    <FolderPlus size={16} />
+                    <div className="dropdown-item-text">
+                      <strong>Add Folder...</strong>
+                      <small>Append samples from another folder</small>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setIsImportMenuOpen(false);
+                      addFiles();
+                    }}
+                  >
+                    <FilePlus size={16} />
+                    <div className="dropdown-item-text">
+                      <strong>Add Audio Files...</strong>
+                      <small>Append individual sample files</small>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+            <button onClick={analyzeAll} disabled={!samples.length || isAnalyzing} title="Analyze unanalyzed samples">
+              {isAnalyzing && !isPausing ? <Loader2 size={16} className="spin text-teal" /> : <Sparkles size={16} />}
+              <span>Analyze</span>
+            </button>
+            <button onClick={pauseAnalysis} disabled={!isAnalyzing || isPausing} title="Pause analysis">
+              {isPausing ? <Loader2 size={16} className="spin" /> : <PauseCircle size={16} />}
+              <span>{isPausing ? "Pausing..." : "Pause"}</span>
+            </button>
+
+            <div className="dropdown-wrapper" ref={exportMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                disabled={!samples.length}
+                title="Export sample metadata"
+                className={isExportMenuOpen ? "active" : ""}
+              >
+                <Download size={15} />
+                <span>Export</span>
+                <ChevronDown size={14} className={isExportMenuOpen ? "rotate-180" : ""} />
+              </button>
+              {isExportMenuOpen && (
+                <div className="dropdown-menu">
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      exportSamples("csv");
+                    }}
+                  >
+                    <Download size={15} />
+                    <div className="dropdown-item-text">
+                      <strong>Export CSV (.csv)</strong>
+                      <small>Spreadsheet with BPM, key, scale & pitches</small>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setIsExportMenuOpen(false);
+                      exportSamples("json");
+                    }}
+                  >
+                    <FileJson size={15} />
+                    <div className="dropdown-item-text">
+                      <strong>Export JSON (.json)</strong>
+                      <small>Structured audio metadata & waveforms</small>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Theme Selector Menu */}
+            <div className="dropdown-wrapper" ref={themeMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsThemeMenuOpen((prev) => !prev)}
+                title="Change UI Theme"
+                className={isThemeMenuOpen ? "active" : ""}
+              >
+                <Palette size={15} />
+                <span>Theme</span>
+                <ChevronDown size={14} className={isThemeMenuOpen ? "rotate-180" : ""} />
+              </button>
+              {isThemeMenuOpen && (
+                <div className="dropdown-menu theme-menu">
+                  <div className="menu-heading">UI Theme</div>
+                  {THEMES.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`dropdown-item theme-item ${theme === item.key ? "selected" : ""}`}
+                      onClick={() => {
+                        setTheme(item.key);
+                        setIsThemeMenuOpen(false);
+                      }}
+                    >
+                      <div className="theme-swatch">
+                        <span style={{ background: item.previewColors[0] }} />
+                        <span style={{ background: item.previewColors[1] }} />
+                        <span style={{ background: item.previewColors[2] }} />
+                      </div>
+                      <div className="dropdown-item-text">
+                        <strong>{item.label}</strong>
+                        <small>{item.desc}</small>
+                      </div>
+                      {theme === item.key && <Check size={14} className="theme-check-icon" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsClearConfirmOpen(true)}
+              disabled={!samples.length}
+              title="Clear library view"
+            >
+              <Trash2 size={15} />
+              <span>Clear</span>
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsClearConfirmOpen(true)}
-            disabled={!samples.length}
-            title="Clear library view"
-          >
-            <Trash2 size={16} />
-            <span>Clear</span>
-          </button>
-
-          <div className="toolbar-divider" />
-
-          {/* Side panels toggle buttons next to each other on the right */}
-          <div className="panel-toggles-group">
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen((value) => !value)}
-              title={isSidebarOpen ? "Hide filters panel" : "Show filters panel"}
-              className={isSidebarOpen ? "panel-btn active" : "panel-btn"}
-            >
-              {isSidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
-              <span>Filters</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsInspectorOpen((value) => !value)}
-              title={isInspectorOpen ? "Hide inspector panel" : "Show inspector panel"}
-              className={isInspectorOpen ? "panel-btn active" : "panel-btn"}
-            >
-              {isInspectorOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
-              <span>Inspector</span>
-            </button>
+          <div className="toolbar-right">
+            {/* Side panels toggle buttons next to each other on the right */}
+            <div className="panel-toggles-group">
+              <button
+                type="button"
+                onClick={() => setIsSidebarOpen((value) => !value)}
+                title={isSidebarOpen ? "Hide filters panel" : "Show filters panel"}
+                className={isSidebarOpen ? "panel-btn active" : "panel-btn"}
+              >
+                {isSidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+                <span>Filters</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsInspectorOpen((value) => !value)}
+                title={isInspectorOpen ? "Hide inspector panel" : "Show inspector panel"}
+                className={isInspectorOpen ? "panel-btn active" : "panel-btn"}
+              >
+                {isInspectorOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+                <span>Inspector</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -1013,7 +1124,6 @@ function App() {
           activeAnalysis={activeAnalysis}
           onChange={updateSelected}
           onReanalyze={reanalyzeSelected}
-          onClose={() => setIsInspectorOpen(false)}
           onOpenFileLocation={openFileLocation}
         />
       </section>
@@ -1027,7 +1137,6 @@ function Inspector({
   activeAnalysis,
   onChange,
   onReanalyze,
-  onClose,
   onOpenFileLocation
 }: {
   sample?: SampleRecord;
@@ -1035,7 +1144,6 @@ function Inspector({
   activeAnalysis?: ActiveAnalysis | null;
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
-  onClose?: () => void;
   onOpenFileLocation?: (path?: string) => void;
 }) {
   const audioSrc = sample ? convertFileSrc(sample.path) : "";
@@ -1080,17 +1188,6 @@ function Inspector({
         <div className="inspector-title">
           <h2 title={sample?.fileName}>{sample?.fileName ?? "Inspector"}</h2>
           <p>{sample ? `${formatBytes(sample.fileSize)} - ${sample.extension.toUpperCase()}` : "Select a sample"}</p>
-          {sample && (
-            <button
-              type="button"
-              className="inspector-path-link"
-              onClick={() => onOpenFileLocation?.(sample.path)}
-              title={`Click to reveal in File Explorer:\n${sample.path}`}
-            >
-              <ExternalLink size={12} />
-              <span className="inspector-path-text">{sample.path}</span>
-            </button>
-          )}
         </div>
         <div className="inspector-actions">
           <button
@@ -1103,11 +1200,6 @@ function Inspector({
           <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
             <RefreshCw size={15} />
           </button>
-          {onClose && (
-            <button onClick={onClose} title="Close inspector panel">
-              <PanelRightClose size={15} />
-            </button>
-          )}
         </div>
       </div>
 
