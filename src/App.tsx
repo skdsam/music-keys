@@ -25,12 +25,14 @@ import {
   AlertTriangle,
   FolderSearch,
   Palette,
-  Check
+  Check,
+  GripVertical
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { startDrag } from "@crabnebula/tauri-plugin-drag";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type DragEvent } from "react";
 
 type ActiveAnalysis = {
   sampleId: string;
@@ -286,6 +288,18 @@ function App() {
     } catch (err) {
       console.error("Failed to open file location:", err);
       setNotice(`Failed to open location: ${String(err)}`);
+    }
+  };
+
+  const handleDragSample = async (filePath: string, event: DragEvent) => {
+    event.preventDefault();
+    try {
+      await startDrag({
+        item: [filePath],
+        icon: "",
+      });
+    } catch (err) {
+      console.error("Failed to start drag:", err);
     }
   };
 
@@ -1064,10 +1078,21 @@ function App() {
                       isThisSampleAnalyzing ? "analyzing-active" : ""
                     }`}
                     onClick={() => setSelectedId(sample.id)}
+                    draggable="true"
+                    onDragStart={(e) => handleDragSample(sample.path, e)}
                     role="row"
                   >
                     <span className="file-cell">
                       <span className="file-title-line">
+                        <span
+                          className="drag-handle"
+                          draggable="true"
+                          onDragStart={(e) => handleDragSample(sample.path, e)}
+                          title={`Drag ${sample.fileName} into DAW or desktop`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <GripVertical size={13} />
+                        </span>
                         {isThisSampleAnalyzing && <Loader2 size={13} className="spin text-teal" />}
                         <strong>{sample.fileName}</strong>
                       </span>
@@ -1125,6 +1150,7 @@ function App() {
           onChange={updateSelected}
           onReanalyze={reanalyzeSelected}
           onOpenFileLocation={openFileLocation}
+          onDragSample={handleDragSample}
         />
       </section>
     </main>
@@ -1137,7 +1163,8 @@ function Inspector({
   activeAnalysis,
   onChange,
   onReanalyze,
-  onOpenFileLocation
+  onOpenFileLocation,
+  onDragSample
 }: {
   sample?: SampleRecord;
   isOpen: boolean;
@@ -1145,6 +1172,7 @@ function Inspector({
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
   onOpenFileLocation?: (path?: string) => void;
+  onDragSample?: (path: string, event: DragEvent) => void;
 }) {
   const audioSrc = sample ? convertFileSrc(sample.path) : "";
   const analysis = sample?.analysis;
@@ -1188,6 +1216,18 @@ function Inspector({
         <div className="inspector-title">
           <h2 title={sample?.fileName}>{sample?.fileName ?? "Inspector"}</h2>
           <p>{sample ? `${formatBytes(sample.fileSize)} - ${sample.extension.toUpperCase()}` : "Select a sample"}</p>
+          {sample && onDragSample && (
+            <div
+              className="daw-drag-chip"
+              draggable="true"
+              onDragStart={(e) => onDragSample(sample.path, e)}
+              title={`Drag ${sample.fileName} directly into Ableton, FL Studio, Reaper, or Desktop`}
+            >
+              <GripVertical size={13} />
+              <AudioWaveform size={13} />
+              <span>Drag to DAW / Track</span>
+            </div>
+          )}
         </div>
         <div className="inspector-actions">
           <button

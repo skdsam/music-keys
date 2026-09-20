@@ -1066,6 +1066,28 @@ button.sample-row {
   font-size: 12px;
 }
 
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  cursor: grab;
+  padding: 1px 2px;
+  border-radius: 4px;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sample-row:hover .drag-handle {
+  opacity: 1;
+  color: var(--teal);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -1382,6 +1404,42 @@ button.sample-row {
 
 .inspector-title p {
   margin-top: 3px;
+}
+
+.daw-drag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px dashed var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: grab;
+  user-select: none;
+  transition: all 0.15s ease;
+  width: fit-content;
+}
+
+.daw-drag-chip:hover {
+  background: var(--row-hover);
+  border-color: var(--teal);
+  color: var(--teal);
+  border-style: solid;
+}
+
+.daw-drag-chip:active {
+  cursor: grabbing;
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.daw-drag-chip svg {
+  color: var(--teal);
+  flex-shrink: 0;
 }
 
 .inspector-actions {
