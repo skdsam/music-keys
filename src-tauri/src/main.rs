@@ -16,6 +16,7 @@ pub fn run() {
             commands::save_sample_metadata,
             commands::analyze_sample,
             commands::export_results,
+            commands::open_file_location,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Sample Key Studio");

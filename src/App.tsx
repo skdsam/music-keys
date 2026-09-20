@@ -22,7 +22,11 @@ import {
   FilePlus,
   Trash2,
   ChevronDown,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink,
+  FolderSearch,
+  Palette,
+  Check
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -123,6 +127,48 @@ const formatBytes = (bytes: number) => {
 
 const formatPercent = (value?: number) => `${Math.round((value ?? 0) * 100)}%`;
 
+type ThemeKey = "dark" | "light" | "cyberpunk" | "analog" | "slate";
+
+interface ThemeOption {
+  key: ThemeKey;
+  label: string;
+  desc: string;
+  previewColors: [string, string, string];
+}
+
+const THEMES: ThemeOption[] = [
+  {
+    key: "dark",
+    label: "Dark Studio",
+    desc: "Pro DAW dark console & teal",
+    previewColors: ["#111419", "#1d222b", "#14b8a6"],
+  },
+  {
+    key: "light",
+    label: "Light Studio",
+    desc: "Clean Nordic studio & slate",
+    previewColors: ["#eef1f4", "#ffffff", "#167c80"],
+  },
+  {
+    key: "cyberpunk",
+    label: "Midnight Cyber",
+    desc: "Synthwave obsidian & neon violet",
+    previewColors: ["#0b0d17", "#171b30", "#a855f7"],
+  },
+  {
+    key: "analog",
+    label: "Warm Analog",
+    desc: "Vintage tape console & amber brass",
+    previewColors: ["#181513", "#29241f", "#d97706"],
+  },
+  {
+    key: "slate",
+    label: "Slate Minimal",
+    desc: "Monochrome graphite & ice blue",
+    previewColors: ["#0f1115", "#1d212b", "#38bdf8"],
+  },
+];
+
 function App() {
   const [samples, setSamples] = useState<SampleRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -136,23 +182,48 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const cancelRequested = useRef(false);
   const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const themeMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const [theme, setTheme] = useState<ThemeKey>(() => {
+    const saved = localStorage.getItem("sample_studio_theme") as ThemeKey | null;
+    return saved && ["dark", "light", "cyberpunk", "analog", "slate"].includes(saved) ? saved : "dark";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("sample_studio_theme", theme);
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     const handleClickOutside = (event: globalThis.MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
         setIsExportMenuOpen(false);
       }
+      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
     };
-    if (isExportMenuOpen) {
+    if (isExportMenuOpen || isThemeMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isExportMenuOpen]);
+  }, [isExportMenuOpen, isThemeMenuOpen]);
+
+  const openFileLocation = async (filePath?: string) => {
+    if (!filePath) return;
+    try {
+      await invoke("open_file_location", { path: filePath });
+    } catch (err) {
+      console.error("Failed to open file location:", err);
+      setNotice(`Failed to open location: ${String(err)}`);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -627,6 +698,47 @@ function App() {
             )}
           </div>
 
+          {/* Theme Selector Menu */}
+          <div className="dropdown-wrapper" ref={themeMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsThemeMenuOpen((prev) => !prev)}
+              title="Change UI Theme"
+              className={isThemeMenuOpen ? "active" : ""}
+            >
+              <Palette size={16} />
+              <span>Theme</span>
+              <ChevronDown size={14} className={isThemeMenuOpen ? "rotate-180" : ""} />
+            </button>
+            {isThemeMenuOpen && (
+              <div className="dropdown-menu theme-menu">
+                <div className="menu-heading">UI Theme</div>
+                {THEMES.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`dropdown-item theme-item ${theme === item.key ? "selected" : ""}`}
+                    onClick={() => {
+                      setTheme(item.key);
+                      setIsThemeMenuOpen(false);
+                    }}
+                  >
+                    <div className="theme-swatch">
+                      <span style={{ background: item.previewColors[0] }} />
+                      <span style={{ background: item.previewColors[1] }} />
+                      <span style={{ background: item.previewColors[2] }} />
+                    </div>
+                    <div className="dropdown-item-text">
+                      <strong>{item.label}</strong>
+                      <small>{item.desc}</small>
+                    </div>
+                    {theme === item.key && <Check size={14} className="theme-check-icon" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setIsClearConfirmOpen(true)}
@@ -902,6 +1014,7 @@ function App() {
           onChange={updateSelected}
           onReanalyze={reanalyzeSelected}
           onClose={() => setIsInspectorOpen(false)}
+          onOpenFileLocation={openFileLocation}
         />
       </section>
     </main>
@@ -914,7 +1027,8 @@ function Inspector({
   activeAnalysis,
   onChange,
   onReanalyze,
-  onClose
+  onClose,
+  onOpenFileLocation
 }: {
   sample?: SampleRecord;
   isOpen: boolean;
@@ -922,6 +1036,7 @@ function Inspector({
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
   onClose?: () => void;
+  onOpenFileLocation?: (path?: string) => void;
 }) {
   const audioSrc = sample ? convertFileSrc(sample.path) : "";
   const analysis = sample?.analysis;
@@ -965,8 +1080,26 @@ function Inspector({
         <div className="inspector-title">
           <h2 title={sample?.fileName}>{sample?.fileName ?? "Inspector"}</h2>
           <p>{sample ? `${formatBytes(sample.fileSize)} - ${sample.extension.toUpperCase()}` : "Select a sample"}</p>
+          {sample && (
+            <button
+              type="button"
+              className="inspector-path-link"
+              onClick={() => onOpenFileLocation?.(sample.path)}
+              title={`Click to reveal in File Explorer:\n${sample.path}`}
+            >
+              <ExternalLink size={12} />
+              <span className="inspector-path-text">{sample.path}</span>
+            </button>
+          )}
         </div>
         <div className="inspector-actions">
+          <button
+            onClick={() => onOpenFileLocation?.(sample?.path)}
+            disabled={!sample}
+            title="Open file location in File Explorer"
+          >
+            <FolderSearch size={15} />
+          </button>
           <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
             <RefreshCw size={15} />
           </button>

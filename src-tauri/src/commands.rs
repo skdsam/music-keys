@@ -320,3 +320,49 @@ fn format_float(value: f32) -> String {
         format!("{value:.2}")
     }
 }
+
+#[tauri::command]
+pub fn open_file_location(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Err(format!("File does not exist: {path}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let windows_path = path.replace('/', "\\");
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", windows_path))
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("Failed to open file in Explorer: {e}"))?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open file in Finder: {e}"))?;
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let parent = p.parent().unwrap_or(p);
+        std::process::Command::new("xdg-open")
+            .arg(parent)
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {e}"))?;
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        Err("Unsupported operating system".to_string())
+    }
+}
+
