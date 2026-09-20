@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SampleRecord {
     pub id: String,
@@ -11,6 +11,12 @@ pub struct SampleRecord {
     pub file_size: u64,
     pub last_modified: Option<u64>,
     pub status: String,
+    pub analysis: Option<AnalysisResult>,
+    pub verified: Option<bool>,
+    pub user_key: Option<String>,
+    pub user_scale: Option<String>,
+    pub user_bpm: Option<String>,
+    pub user_pitch: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

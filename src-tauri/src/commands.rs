@@ -1,4 +1,5 @@
 use crate::analysis;
+use crate::db;
 use crate::models::{AnalysisResult, ExportSample, SampleRecord};
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
@@ -12,12 +13,13 @@ const AUDIO_EXTENSIONS: &[&str] = &[
 ];
 
 #[tauri::command]
-pub fn scan_folder(path: String) -> Result<Vec<SampleRecord>, String> {
-    let root = PathBuf::from(path);
+pub fn scan_folder(app: tauri::AppHandle, path: String) -> Result<Vec<SampleRecord>, String> {
+    let root = PathBuf::from(&path);
     if !root.is_dir() {
         return Err("Selected path is not a folder".to_string());
     }
 
+    let conn = db::open_db(&app).ok();
     let mut samples = Vec::new();
 
     for entry in WalkDir::new(&root)
@@ -29,8 +31,8 @@ pub fn scan_folder(path: String) -> Result<Vec<SampleRecord>, String> {
             continue;
         }
 
-        let path = entry.path();
-        let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+        let file_path = entry.path();
+        let Some(extension) = file_path.extension().and_then(|value| value.to_str()) else {
             continue;
         };
 
@@ -39,7 +41,19 @@ pub fn scan_folder(path: String) -> Result<Vec<SampleRecord>, String> {
             continue;
         }
 
-        if let Ok(record) = sample_record(path, &root, extension) {
+        if let Ok(mut record) = sample_record(file_path, &root, extension) {
+            if let Some(ref db_conn) = conn {
+                if let Some(cached) = db::get_cached_analysis(
+                    db_conn,
+                    &record.path,
+                    record.file_size,
+                    record.last_modified,
+                ) {
+                    record.analysis = Some(cached);
+                    record.status = "done".to_string();
+                }
+                let _ = db::upsert_sample(db_conn, &record);
+            }
             samples.push(record);
         }
     }
@@ -49,9 +63,101 @@ pub fn scan_folder(path: String) -> Result<Vec<SampleRecord>, String> {
 }
 
 #[tauri::command]
+pub fn scan_files(app: tauri::AppHandle, paths: Vec<String>) -> Result<Vec<SampleRecord>, String> {
+    let conn = db::open_db(&app).ok();
+    let mut samples = Vec::new();
+
+    for path_str in paths {
+        let file_path = Path::new(&path_str);
+        if !file_path.is_file() {
+            continue;
+        }
+
+        let Some(extension) = file_path.extension().and_then(|value| value.to_str()) else {
+            continue;
+        };
+
+        let extension = extension.to_ascii_lowercase();
+        if !AUDIO_EXTENSIONS.contains(&extension.as_str()) {
+            continue;
+        }
+
+        let parent_dir = file_path.parent().unwrap_or(file_path);
+        if let Ok(mut record) = sample_record(file_path, parent_dir, extension) {
+            if let Some(ref db_conn) = conn {
+                if let Some(cached) = db::get_cached_analysis(
+                    db_conn,
+                    &record.path,
+                    record.file_size,
+                    record.last_modified,
+                ) {
+                    record.analysis = Some(cached);
+                    record.status = "done".to_string();
+                }
+                let _ = db::upsert_sample(db_conn, &record);
+            }
+            samples.push(record);
+        }
+    }
+
+    samples.sort_by(|a, b| a.file_name.to_lowercase().cmp(&b.file_name.to_lowercase()));
+    Ok(samples)
+}
+
+#[tauri::command]
+pub fn load_library(app: tauri::AppHandle) -> Result<Vec<SampleRecord>, String> {
+    let conn = db::open_db(&app)?;
+    db::load_all_samples(&conn)
+}
+
+#[tauri::command]
+pub fn clear_library(app: tauri::AppHandle) -> Result<(), String> {
+    let conn = db::open_db(&app)?;
+    db::clear_all(&conn)
+}
+
+#[tauri::command]
+pub fn save_sample_metadata(
+    app: tauri::AppHandle,
+    path: String,
+    user_key: Option<String>,
+    user_scale: Option<String>,
+    user_bpm: Option<String>,
+    user_pitch: Option<String>,
+    verified: bool,
+) -> Result<(), String> {
+    let conn = db::open_db(&app)?;
+    db::update_user_metadata(
+        &conn,
+        &path,
+        user_key,
+        user_scale,
+        user_bpm,
+        user_pitch,
+        verified,
+    )
+}
+
+#[tauri::command]
 pub async fn analyze_sample(app: tauri::AppHandle, path: String) -> Result<AnalysisResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        analysis::analyze_path(&app, Path::new(&path)).map_err(|error| error.to_string())
+        let result =
+            analysis::analyze_path(&app, Path::new(&path)).map_err(|error| error.to_string())?;
+
+        // Cache analysis result in SQLite database
+        if let Ok(metadata) = fs::metadata(&path) {
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|duration| duration.as_secs());
+
+            if let Ok(conn) = db::open_db(&app) {
+                let _ = db::save_analysis(&conn, &path, metadata.len(), modified, &result);
+            }
+        }
+
+        Ok(result)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -183,7 +289,13 @@ fn sample_record(
                 value
             }
         })
-        .unwrap_or_else(|| ".".to_string());
+        .unwrap_or_else(|| {
+            path.parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .unwrap_or(".")
+                .to_string()
+        });
 
     Ok(SampleRecord {
         id: format!("{:x}", hasher.finish()),
@@ -198,6 +310,12 @@ fn sample_record(
         file_size: metadata.len(),
         last_modified: modified,
         status: "queued".to_string(),
+        analysis: None,
+        verified: Some(false),
+        user_key: None,
+        user_scale: None,
+        user_bpm: None,
+        user_pitch: None,
     })
 }
 

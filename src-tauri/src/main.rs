@@ -1,5 +1,6 @@
 mod analysis;
 mod commands;
+mod db;
 mod models;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -9,6 +10,10 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             commands::scan_folder,
+            commands::scan_files,
+            commands::load_library,
+            commands::clear_library,
+            commands::save_sample_metadata,
             commands::analyze_sample,
             commands::export_results,
         ])

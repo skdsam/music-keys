@@ -17,7 +17,12 @@ import {
   PanelRightOpen,
   Table2,
   AudioWaveform,
-  Loader2
+  Loader2,
+  FolderPlus,
+  FilePlus,
+  Trash2,
+  ChevronDown,
+  AlertTriangle
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -130,7 +135,24 @@ function App() {
   const [notice, setNotice] = useState("Open a folder to begin.");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const cancelRequested = useRef(false);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: globalThis.MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    if (isExportMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isExportMenuOpen]);
 
   useEffect(() => {
     let isMounted = true;
@@ -200,6 +222,35 @@ function App() {
     });
   }, [activeFilter, query, samples]);
 
+  const [loadedSources, setLoadedSources] = useState<string[]>([]);
+
+  // Auto-restore library from database on startup
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        const saved = await invoke<SampleRecord[]>("load_library");
+        if (saved && saved.length > 0) {
+          setSamples(saved);
+          setSelectedId(saved[0]?.id ?? null);
+          const cachedCount = saved.filter((s) => s.status === "done" && s.analysis).length;
+          setNotice(`Restored ${saved.length} samples from database cache (${cachedCount} analyzed).`);
+        }
+      } catch {
+        // First run or empty database
+      }
+    };
+    loadSaved();
+  }, []);
+
+  const mergeSamples = (existing: SampleRecord[], incoming: SampleRecord[]) => {
+    const existingPaths = new Set(existing.map((s) => s.path));
+    const newItems = incoming.filter((s) => !existingPaths.has(s.path));
+    const combined = [...existing, ...newItems].sort((a, b) =>
+      a.fileName.toLowerCase().localeCompare(b.fileName.toLowerCase())
+    );
+    return { merged: combined, added: newItems.length };
+  };
+
   const openFolder = async () => {
     const selectedPath = await open({
       directory: true,
@@ -211,6 +262,7 @@ function App() {
 
     setNotice("Scanning folder...");
     setFolderPath(selectedPath);
+    setLoadedSources([selectedPath]);
     cancelRequested.current = true;
     setIsAnalyzing(false);
     setIsPausing(false);
@@ -220,10 +272,98 @@ function App() {
       const scanned = await invoke<SampleRecord[]>("scan_folder", { path: selectedPath });
       setSamples(scanned);
       setSelectedId(scanned[0]?.id ?? null);
-      setNotice(scanned.length ? `Found ${scanned.length} audio files.` : "No supported audio files found.");
+      const cachedCount = scanned.filter((s) => s.status === "done" && s.analysis).length;
+      setNotice(
+        scanned.length
+          ? `Loaded ${scanned.length} samples (${cachedCount} analyzed from cache).`
+          : "No supported audio files found."
+      );
     } catch (error) {
       setNotice(String(error));
     }
+  };
+
+  const addFolder = async () => {
+    const selectedPath = await open({
+      directory: true,
+      multiple: false,
+      title: "Add sample folder to library"
+    });
+
+    if (!selectedPath || Array.isArray(selectedPath)) return;
+
+    setNotice(`Scanning ${selectedPath}...`);
+    try {
+      const scanned = await invoke<SampleRecord[]>("scan_folder", { path: selectedPath });
+      if (!scanned.length) {
+        setNotice("No supported audio files found in folder.");
+        return;
+      }
+
+      const { merged, added } = mergeSamples(samples, scanned);
+      setSamples(merged);
+      setLoadedSources((prev) => Array.from(new Set([...prev, selectedPath])));
+      if (!selectedId && merged[0]) {
+        setSelectedId(merged[0].id);
+      }
+      const cachedCount = scanned.filter((s) => s.status === "done" && s.analysis).length;
+      setNotice(
+        `Added ${added} new samples (${scanned.length - added} duplicates skipped, ${cachedCount} cached).`
+      );
+    } catch (error) {
+      setNotice(String(error));
+    }
+  };
+
+  const addFiles = async () => {
+    const selectedPaths = await open({
+      directory: false,
+      multiple: true,
+      title: "Add audio samples to library",
+      filters: [
+        {
+          name: "Audio files",
+          extensions: ["wav", "wave", "aif", "aiff", "flac", "mp3", "ogg", "m4a", "aac"]
+        }
+      ]
+    });
+
+    if (!selectedPaths) return;
+    const paths = Array.isArray(selectedPaths) ? selectedPaths : [selectedPaths];
+    if (!paths.length) return;
+
+    setNotice(`Scanning ${paths.length} files...`);
+    try {
+      const scanned = await invoke<SampleRecord[]>("scan_files", { paths });
+      if (!scanned.length) {
+        setNotice("No supported audio files could be loaded.");
+        return;
+      }
+
+      const { merged, added } = mergeSamples(samples, scanned);
+      setSamples(merged);
+      if (!selectedId && merged[0]) {
+        setSelectedId(merged[0].id);
+      }
+      const cachedCount = scanned.filter((s) => s.status === "done" && s.analysis).length;
+      setNotice(
+        `Added ${added} new audio files (${scanned.length - added} duplicates skipped, ${cachedCount} cached).`
+      );
+    } catch (error) {
+      setNotice(String(error));
+    }
+  };
+
+  const clearLibrary = () => {
+    cancelRequested.current = true;
+    setIsAnalyzing(false);
+    setIsPausing(false);
+    setActiveAnalysis(null);
+    setSamples([]);
+    setSelectedId(null);
+    setFolderPath("");
+    setLoadedSources([]);
+    setNotice("Library view cleared. Open or add folders/files to begin.");
   };
 
   const analyzeAll = async () => {
@@ -381,9 +521,19 @@ function App() {
 
   const updateSelected = (patch: Partial<SampleRecord>) => {
     if (!selected) return;
+    const updated = { ...selected, ...patch };
     setSamples((current) =>
-      current.map((sample) => (sample.id === selected.id ? { ...sample, ...patch } : sample))
+      current.map((sample) => (sample.id === selected.id ? updated : sample))
     );
+
+    invoke("save_sample_metadata", {
+      path: selected.path,
+      userKey: updated.userKey ?? null,
+      userScale: updated.userScale ?? null,
+      userBpm: updated.userBpm ?? null,
+      userPitch: updated.userPitch ?? null,
+      verified: Boolean(updated.verified)
+    }).catch((err) => console.error("Failed to persist metadata:", err));
   };
 
   return (
@@ -395,23 +545,34 @@ function App() {
           </div>
           <div>
             <h1>Sample Key Studio</h1>
-            <p>{folderPath || notice}</p>
+            <p title={loadedSources.join("; ") || folderPath || notice}>
+              {samples.length > 0
+                ? `${samples.length} samples ${
+                    loadedSources.length > 1
+                      ? `(${loadedSources.length} folders)`
+                      : folderPath
+                      ? `(${folderPath})`
+                      : ""
+                  } - ${notice}`
+                : notice}
+            </p>
           </div>
         </div>
 
         <div className="toolbar">
-          <button
-            onClick={() => setIsSidebarOpen((value) => !value)}
-            title={isSidebarOpen ? "Hide filters" : "Show filters"}
-          >
-            {isSidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
-            <span>Filters</span>
-          </button>
-          <button className="primary" onClick={openFolder} title="Open folder">
+          <button className="primary" onClick={openFolder} title="Open folder (replaces library)">
             <FolderOpen size={17} />
             <span>Open</span>
           </button>
-          <button onClick={analyzeAll} disabled={!samples.length || isAnalyzing} title="Analyze folder">
+          <button onClick={addFolder} title="Add another folder to library">
+            <FolderPlus size={17} />
+            <span>Add Folder</span>
+          </button>
+          <button onClick={addFiles} title="Add audio sample files to library">
+            <FilePlus size={17} />
+            <span>Add Files</span>
+          </button>
+          <button onClick={analyzeAll} disabled={!samples.length || isAnalyzing} title="Analyze unanalyzed samples">
             {isAnalyzing && !isPausing ? <Loader2 size={17} className="spin text-teal" /> : <Sparkles size={17} />}
             <span>Analyze</span>
           </button>
@@ -419,23 +580,132 @@ function App() {
             {isPausing ? <Loader2 size={17} className="spin" /> : <PauseCircle size={17} />}
             <span>{isPausing ? "Pausing..." : "Pause"}</span>
           </button>
-          <button onClick={() => exportSamples("csv")} disabled={!samples.length} title="Export CSV">
-            <Download size={17} />
-            <span>CSV</span>
-          </button>
-          <button onClick={() => exportSamples("json")} disabled={!samples.length} title="Export JSON">
-            <FileJson size={17} />
-            <span>JSON</span>
-          </button>
+
+          <div className="dropdown-wrapper" ref={exportMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsExportMenuOpen((prev) => !prev)}
+              disabled={!samples.length}
+              title="Export sample metadata"
+              className={isExportMenuOpen ? "active" : ""}
+            >
+              <Download size={16} />
+              <span>Export</span>
+              <ChevronDown size={14} className={isExportMenuOpen ? "rotate-180" : ""} />
+            </button>
+            {isExportMenuOpen && (
+              <div className="dropdown-menu">
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    exportSamples("csv");
+                  }}
+                >
+                  <Download size={15} />
+                  <div className="dropdown-item-text">
+                    <strong>Export CSV (.csv)</strong>
+                    <small>Spreadsheet with BPM, key, scale & pitches</small>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    exportSamples("json");
+                  }}
+                >
+                  <FileJson size={15} />
+                  <div className="dropdown-item-text">
+                    <strong>Export JSON (.json)</strong>
+                    <small>Structured audio metadata & waveforms</small>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
-            onClick={() => setIsInspectorOpen((value) => !value)}
-            title={isInspectorOpen ? "Hide inspector" : "Show inspector"}
+            type="button"
+            onClick={() => setIsClearConfirmOpen(true)}
+            disabled={!samples.length}
+            title="Clear library view"
           >
-            {isInspectorOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
-            <span>Inspector</span>
+            <Trash2 size={16} />
+            <span>Clear</span>
           </button>
+
+          <div className="toolbar-divider" />
+
+          {/* Side panels toggle buttons next to each other on the right */}
+          <div className="panel-toggles-group">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen((value) => !value)}
+              title={isSidebarOpen ? "Hide filters panel" : "Show filters panel"}
+              className={isSidebarOpen ? "panel-btn active" : "panel-btn"}
+            >
+              {isSidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+              <span>Filters</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsInspectorOpen((value) => !value)}
+              title={isInspectorOpen ? "Hide inspector panel" : "Show inspector panel"}
+              className={isInspectorOpen ? "panel-btn active" : "panel-btn"}
+            >
+              {isInspectorOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
+              <span>Inspector</span>
+            </button>
+          </div>
         </div>
       </header>
+
+      {isClearConfirmOpen && (
+        <div className="modal-backdrop" onClick={() => setIsClearConfirmOpen(false)}>
+          <div
+            className="modal-card"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div className="modal-icon-danger">
+                <AlertTriangle size={20} />
+              </div>
+              <div className="modal-header-text">
+                <h3>Clear Library?</h3>
+                <p>Are you sure you want to clear loaded samples?</p>
+              </div>
+            </div>
+            <p className="modal-desc">
+              This will remove <strong>{samples.length}</strong> sample{samples.length === 1 ? "" : "s"} from your active view. Your cached analysis results in the database will be preserved.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-cancel-btn"
+                onClick={() => setIsClearConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-danger-btn"
+                onClick={() => {
+                  clearLibrary();
+                  setIsClearConfirmOpen(false);
+                }}
+              >
+                <Trash2 size={15} />
+                <span>Clear Library</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section
         className={`content-grid ${!isSidebarOpen ? "sidebar-collapsed" : ""} ${
@@ -629,6 +899,7 @@ function App() {
           activeAnalysis={activeAnalysis}
           onChange={updateSelected}
           onReanalyze={reanalyzeSelected}
+          onClose={() => setIsInspectorOpen(false)}
         />
       </section>
     </main>
@@ -640,13 +911,15 @@ function Inspector({
   isOpen,
   activeAnalysis,
   onChange,
-  onReanalyze
+  onReanalyze,
+  onClose
 }: {
   sample?: SampleRecord;
   isOpen: boolean;
   activeAnalysis?: ActiveAnalysis | null;
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
+  onClose?: () => void;
 }) {
   const audioSrc = sample ? convertFileSrc(sample.path) : "";
   const analysis = sample?.analysis;
@@ -695,6 +968,11 @@ function Inspector({
           <button onClick={onReanalyze} disabled={!sample} title="Re-analyze selected sample">
             <RefreshCw size={15} />
           </button>
+          {onClose && (
+            <button onClick={onClose} title="Close inspector panel">
+              <PanelRightClose size={15} />
+            </button>
+          )}
         </div>
       </div>
 
