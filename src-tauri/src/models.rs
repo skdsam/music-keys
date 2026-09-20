@@ -46,3 +46,12 @@ pub struct ExportSample {
     pub analysis: Option<AnalysisResult>,
     pub verified: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnalysisProgress {
+    pub path: String,
+    pub stage: String,
+    pub message: String,
+    pub percent: u8,
+}

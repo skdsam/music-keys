@@ -465,6 +465,242 @@ button.sample-row {
   background: var(--coral);
 }
 
+.spin {
+  animation: appSpin 1s linear infinite;
+}
+
+@keyframes appSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.text-teal {
+  color: var(--teal);
+}
+
+.analysis-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid #c2e2e3;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f0f9f9 0%, #e6f4f4 100%);
+  box-shadow: 0 4px 14px rgba(22, 124, 128, 0.08);
+  animation: bannerFadeIn 0.2s ease-out;
+}
+
+@keyframes bannerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.analysis-banner-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analysis-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.analysis-banner-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(22, 124, 128, 0.12);
+  color: var(--teal-dark);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.analysis-banner-file {
+  font-size: 13px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.analysis-banner-stage {
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.analysis-banner-progress {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.progress-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.progress-group-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.progress-group-header strong {
+  color: var(--ink);
+}
+
+.progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progress-fill.file-fill {
+  background: linear-gradient(90deg, #167c80, #25a4a9);
+}
+
+.progress-fill.queue-fill {
+  background: linear-gradient(90deg, #3f6eb3, #5d8ed6);
+}
+
+.analysis-banner-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.banner-pause-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid #badfe0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.banner-pause-btn:hover:not(:disabled) {
+  background: #edf8f8;
+  border-color: var(--teal);
+}
+
+.sample-row.analyzing-active {
+  background: #edf8f8 !important;
+  border-left: 3px solid var(--teal);
+}
+
+.file-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.file-title-line strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-progress-track {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(22, 124, 128, 0.15);
+  overflow: hidden;
+  margin-top: 3px;
+}
+
+.row-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--teal);
+  border-radius: 2px;
+  transition: width 0.2s ease-out;
+}
+
+.analyzing-cell-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+}
+
+.inspector-analyzing-card {
+  margin-bottom: 10px;
+  padding: 9px;
+  border: 1px solid #c2e2e3;
+  border-radius: 8px;
+  background: #edf8f8;
+}
+
+.inspector-analyzing-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--teal-dark);
+  font-size: 12px;
+}
+
+.inspector-analyzing-card p {
+  margin: 4px 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.inspector-progress-track {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(22, 124, 128, 0.15);
+  overflow: hidden;
+}
+
+.inspector-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--teal);
+  transition: width 0.2s ease-out;
+}
+
 .empty-state {
   display: grid;
   min-height: 360px;

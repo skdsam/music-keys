@@ -16,8 +16,9 @@ use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::ShellExt;
+use crate::models::AnalysisProgress;
 
 const ESSENTIA_SIDECAR: &str = "binaries/essentia_streaming_extractor_music";
 
@@ -48,10 +49,26 @@ pub fn analyze_path(app: &AppHandle, path: &Path) -> Result<AnalysisResult, Anal
         return Err(AnalysisError::MissingFile);
     }
 
+    let path_str = path.to_string_lossy().to_string();
+    let emit_progress = |stage: &str, message: &str, percent: u8| {
+        let _ = app.emit(
+            "analysis-progress",
+            AnalysisProgress {
+                path: path_str.clone(),
+                stage: stage.to_string(),
+                message: message.to_string(),
+                percent,
+            },
+        );
+    };
+
+    emit_progress("reading", "Opening and decoding audio stream...", 15);
     let decoded = decode_audio(path);
 
+    emit_progress("analyzing", "Extracting acoustic features and key/BPM...", 45);
     match analyze_with_essentia(app, path) {
         Ok(mut essentia_result) => {
+            emit_progress("waveform", "Generating waveform and pitch details...", 80);
             if let Ok(audio) = decoded {
                 attach_native_details(&mut essentia_result, &audio);
             } else {
@@ -60,12 +77,15 @@ pub fn analyze_path(app: &AppHandle, path: &Path) -> Result<AnalysisResult, Anal
                 );
             }
 
+            emit_progress("done", "Analysis complete", 100);
             Ok(essentia_result)
         }
         Err(essentia_error) => {
+            emit_progress("fallback", "Running built-in analyzer fallback...", 60);
             let audio = match decoded {
                 Ok(audio) => audio,
                 Err(error) => {
+                    emit_progress("error", "Failed to decode audio file", 100);
                     return Ok(unknown_result(vec![
                         format!("Essentia did not complete: {essentia_error}"),
                         error.to_string(),
@@ -77,6 +97,7 @@ pub fn analyze_path(app: &AppHandle, path: &Path) -> Result<AnalysisResult, Anal
             result.warnings.push(format!(
                 "Essentia did not complete: {essentia_error}. Used the built-in analyzer fallback."
             ));
+            emit_progress("done", "Analysis complete", 100);
             Ok(result)
         }
     }
@@ -129,9 +150,17 @@ fn run_standard_essentia<S: AsRef<OsStr>>(
     output_path: &Path,
 ) -> Result<(), String> {
     let _ = fs::remove_file(output_path);
-    let output = Command::new(executable)
-        .arg(input_path)
-        .arg(output_path)
+    let mut command = Command::new(executable);
+    command.arg(input_path).arg(output_path);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = command
         .output()
         .map_err(|error| error.to_string())?;
 
@@ -232,6 +261,17 @@ fn push_binary_candidates(candidates: &mut Vec<PathBuf>, base: &Path) {
         binary_dir.join(platform_sidecar_executable_name()),
     );
     push_candidate(candidates, binary_dir.join(platform_executable_name()));
+
+    if let Ok(entries) = fs::read_dir(&binary_dir) {
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name.starts_with("essentia_streaming_extractor_music") {
+                    push_candidate(candidates, path);
+                }
+            }
+        }
+    }
 }
 
 fn push_candidate(candidates: &mut Vec<PathBuf>, path: PathBuf) {

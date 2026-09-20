@@ -49,8 +49,12 @@ pub fn scan_folder(path: String) -> Result<Vec<SampleRecord>, String> {
 }
 
 #[tauri::command]
-pub fn analyze_sample(app: tauri::AppHandle, path: String) -> Result<AnalysisResult, String> {
-    analysis::analyze_path(&app, Path::new(&path)).map_err(|error| error.to_string())
+pub async fn analyze_sample(app: tauri::AppHandle, path: String) -> Result<AnalysisResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        analysis::analyze_path(&app, Path::new(&path)).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

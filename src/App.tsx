@@ -16,11 +16,32 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Table2,
-  AudioWaveform
+  AudioWaveform,
+  Loader2
 } from "lucide-react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+
+type ActiveAnalysis = {
+  sampleId: string;
+  fileName: string;
+  path: string;
+  folder: string;
+  current: number;
+  total: number;
+  overallPercent: number;
+  filePercent: number;
+  stageMessage: string;
+};
+
+type ProgressPayload = {
+  path: string;
+  stage: string;
+  message: string;
+  percent: number;
+};
 
 type AnalysisResult = {
   bpm: number | null;
@@ -104,10 +125,34 @@ function App() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [query, setQuery] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isPausing, setIsPausing] = useState(false);
+  const [activeAnalysis, setActiveAnalysis] = useState<ActiveAnalysis | null>(null);
   const [notice, setNotice] = useState("Open a folder to begin.");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isInspectorOpen, setIsInspectorOpen] = useState(true);
   const cancelRequested = useRef(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    const unlistenPromise = listen<ProgressPayload>("analysis-progress", (event) => {
+      if (!isMounted) return;
+      const { path, message, percent } = event.payload;
+      setActiveAnalysis((prev) => {
+        if (!prev) return null;
+        if (prev.path && prev.path !== path) return prev;
+        return {
+          ...prev,
+          stageMessage: message,
+          filePercent: Math.max(prev.filePercent, percent),
+        };
+      });
+    });
+
+    return () => {
+      isMounted = false;
+      unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, []);
 
   const selected = useMemo(
     () => samples.find((sample) => sample.id === selectedId) ?? samples[0],
@@ -168,6 +213,8 @@ function App() {
     setFolderPath(selectedPath);
     cancelRequested.current = true;
     setIsAnalyzing(false);
+    setIsPausing(false);
+    setActiveAnalysis(null);
 
     try {
       const scanned = await invoke<SampleRecord[]>("scan_folder", { path: selectedPath });
@@ -181,19 +228,50 @@ function App() {
 
   const analyzeAll = async () => {
     if (!samples.length || isAnalyzing) return;
+
+    const toAnalyze = samples.filter((sample) => sample.status !== "done" || !sample.analysis);
+    const total = toAnalyze.length;
+
+    if (total === 0) {
+      setNotice("All samples have already been analyzed.");
+      return;
+    }
+
     cancelRequested.current = false;
     setIsAnalyzing(true);
-    setNotice("Analyzing samples...");
+    setIsPausing(false);
+    setNotice(`Starting analysis of ${total} samples...`);
 
-    for (const sample of samples) {
+    let processed = 0;
+
+    for (const sample of toAnalyze) {
       if (cancelRequested.current) break;
-      if (sample.status === "done" && sample.analysis) continue;
+
+      processed += 1;
+      const overallPercent = Math.round(((processed - 1) / total) * 100);
+
+      setActiveAnalysis({
+        sampleId: sample.id,
+        fileName: sample.fileName,
+        path: sample.path,
+        folder: sample.folder,
+        current: processed,
+        total,
+        overallPercent,
+        filePercent: 12,
+        stageMessage: "Opening audio file...",
+      });
+
+      setNotice(`Analyzing (${processed}/${total}): ${sample.fileName}`);
 
       setSamples((current) =>
         current.map((item) =>
           item.id === sample.id ? { ...item, status: "analyzing", error: undefined } : item
         )
       );
+
+      // Yield 25ms to let UI paint active states and process user events smoothly
+      await new Promise((resolve) => setTimeout(resolve, 25));
 
       try {
         const analysis = await invoke<AnalysisResult>("analyze_sample", { path: sample.path });
@@ -209,24 +287,48 @@ function App() {
           )
         );
       }
+
+      // Small yield between samples to keep UI silky smooth and responsive
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
 
+    const wasPaused = cancelRequested.current;
+    setActiveAnalysis(null);
     setIsAnalyzing(false);
-    setNotice(cancelRequested.current ? "Analysis paused." : "Analysis complete.");
+    setIsPausing(false);
+    setNotice(wasPaused ? "Analysis paused." : `Completed analysis of ${processed} samples.`);
   };
 
   const pauseAnalysis = () => {
     cancelRequested.current = true;
-    setNotice("Finishing current file, then pausing.");
+    setIsPausing(true);
+    setNotice("Finishing current file, then pausing...");
   };
 
   const reanalyzeSelected = async () => {
-    if (!selected) return;
+    if (!selected || isAnalyzing) return;
+    setIsAnalyzing(true);
+    setIsPausing(false);
+    setActiveAnalysis({
+      sampleId: selected.id,
+      fileName: selected.fileName,
+      path: selected.path,
+      folder: selected.folder,
+      current: 1,
+      total: 1,
+      overallPercent: 0,
+      filePercent: 12,
+      stageMessage: "Opening audio file...",
+    });
+
     setSamples((current) =>
       current.map((item) =>
         item.id === selected.id ? { ...item, status: "analyzing", error: undefined } : item
       )
     );
+
+    // Yield for paint
+    await new Promise((resolve) => setTimeout(resolve, 25));
 
     try {
       const analysis = await invoke<AnalysisResult>("analyze_sample", { path: selected.path });
@@ -242,6 +344,10 @@ function App() {
           item.id === selected.id ? { ...item, status: "error", error: String(error) } : item
         )
       );
+    } finally {
+      setActiveAnalysis(null);
+      setIsAnalyzing(false);
+      setIsPausing(false);
     }
   };
 
@@ -306,12 +412,12 @@ function App() {
             <span>Open</span>
           </button>
           <button onClick={analyzeAll} disabled={!samples.length || isAnalyzing} title="Analyze folder">
-            <Sparkles size={17} />
+            {isAnalyzing && !isPausing ? <Loader2 size={17} className="spin text-teal" /> : <Sparkles size={17} />}
             <span>Analyze</span>
           </button>
-          <button onClick={pauseAnalysis} disabled={!isAnalyzing} title="Pause analysis">
-            <PauseCircle size={17} />
-            <span>Pause</span>
+          <button onClick={pauseAnalysis} disabled={!isAnalyzing || isPausing} title="Pause analysis">
+            {isPausing ? <Loader2 size={17} className="spin" /> : <PauseCircle size={17} />}
+            <span>{isPausing ? "Pausing..." : "Pause"}</span>
           </button>
           <button onClick={() => exportSamples("csv")} disabled={!samples.length} title="Export CSV">
             <Download size={17} />
@@ -373,6 +479,68 @@ function App() {
         </aside>
 
         <section className="sample-area">
+          {activeAnalysis && (
+            <div className="analysis-banner" role="region" aria-label="Analysis progress">
+              <div className="analysis-banner-main">
+                <div className="analysis-banner-info">
+                  <div className="analysis-banner-tag">
+                    <Loader2 size={13} className="spin text-teal" />
+                    <span>Analyzing {activeAnalysis.current} of {activeAnalysis.total}</span>
+                  </div>
+                  <strong className="analysis-banner-file" title={activeAnalysis.fileName}>
+                    {activeAnalysis.fileName}
+                  </strong>
+                </div>
+                <div className="analysis-banner-stage">
+                  <span>{activeAnalysis.stageMessage}</span>
+                </div>
+              </div>
+
+              <div className="analysis-banner-progress">
+                <div className="progress-group">
+                  <div className="progress-group-header">
+                    <span>Current file</span>
+                    <strong>{activeAnalysis.filePercent}%</strong>
+                  </div>
+                  <div className="progress-track" title={`Current file: ${activeAnalysis.filePercent}%`}>
+                    <div
+                      className="progress-fill file-fill"
+                      style={{ width: `${Math.max(5, activeAnalysis.filePercent)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="progress-group">
+                  <div className="progress-group-header">
+                    <span>Overall queue</span>
+                    <strong>
+                      {activeAnalysis.overallPercent}% ({activeAnalysis.current - 1}/{activeAnalysis.total})
+                    </strong>
+                  </div>
+                  <div className="progress-track" title={`Overall queue: ${activeAnalysis.overallPercent}%`}>
+                    <div
+                      className="progress-fill queue-fill"
+                      style={{ width: `${Math.max(2, activeAnalysis.overallPercent)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="analysis-banner-actions">
+                <button
+                  type="button"
+                  className="banner-pause-btn"
+                  onClick={pauseAnalysis}
+                  disabled={isPausing}
+                  title="Pause analysis after current file"
+                >
+                  {isPausing ? <Loader2 size={13} className="spin" /> : <PauseCircle size={13} />}
+                  <span>{isPausing ? "Pausing..." : "Pause"}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="table-header">
             <div>
               <h2>Library</h2>
@@ -394,26 +562,55 @@ function App() {
               <span>Confidence</span>
             </div>
             <div className="table-scroll">
-              {filteredSamples.map((sample) => (
-                <button
-                  key={sample.id}
-                  className={`sample-row ${selected?.id === sample.id ? "selected" : ""}`}
-                  onClick={() => setSelectedId(sample.id)}
-                  role="row"
-                >
-                  <span className="file-cell">
-                    <strong>{sample.fileName}</strong>
-                    <small>{sample.folder}</small>
-                  </span>
-                  <span>{sample.analysis?.sampleType ?? sample.status}</span>
-                  <span>{displayKey(sample)}</span>
-                  <span>{sample.userPitch || sample.analysis?.pitchNote || "-"}</span>
-                  <span>{sample.userBpm || sample.analysis?.bpm?.toFixed(1) || "-"}</span>
-                  <span>
-                    <ConfidenceBadge sample={sample} />
-                  </span>
-                </button>
-              ))}
+              {filteredSamples.map((sample) => {
+                const isThisSampleAnalyzing = activeAnalysis?.sampleId === sample.id;
+                return (
+                  <button
+                    key={sample.id}
+                    className={`sample-row ${selected?.id === sample.id ? "selected" : ""} ${
+                      isThisSampleAnalyzing ? "analyzing-active" : ""
+                    }`}
+                    onClick={() => setSelectedId(sample.id)}
+                    role="row"
+                  >
+                    <span className="file-cell">
+                      <span className="file-title-line">
+                        {isThisSampleAnalyzing && <Loader2 size={13} className="spin text-teal" />}
+                        <strong>{sample.fileName}</strong>
+                      </span>
+                      <small>{sample.folder}</small>
+                      {isThisSampleAnalyzing && (
+                        <span className="row-progress-track">
+                          <span
+                            className="row-progress-fill"
+                            style={{ width: `${Math.max(8, activeAnalysis.filePercent)}%` }}
+                          />
+                        </span>
+                      )}
+                    </span>
+                    <span>
+                      {isThisSampleAnalyzing ? (
+                        <span className="badge active analyzing-cell-badge">
+                          <Loader2 size={11} className="spin" />
+                          <span>{activeAnalysis.filePercent}%</span>
+                        </span>
+                      ) : (
+                        sample.analysis?.sampleType ?? sample.status
+                      )}
+                    </span>
+                    <span>{displayKey(sample)}</span>
+                    <span>{sample.userPitch || sample.analysis?.pitchNote || "-"}</span>
+                    <span>{sample.userBpm || sample.analysis?.bpm?.toFixed(1) || "-"}</span>
+                    <span>
+                      <ConfidenceBadge
+                        sample={sample}
+                        isAnalyzingNow={isThisSampleAnalyzing}
+                        percent={isThisSampleAnalyzing ? activeAnalysis.filePercent : undefined}
+                      />
+                    </span>
+                  </button>
+                );
+              })}
 
               {!filteredSamples.length && (
                 <div className="empty-state">
@@ -429,6 +626,7 @@ function App() {
         <Inspector
           sample={selected}
           isOpen={isInspectorOpen}
+          activeAnalysis={activeAnalysis}
           onChange={updateSelected}
           onReanalyze={reanalyzeSelected}
         />
@@ -440,11 +638,13 @@ function App() {
 function Inspector({
   sample,
   isOpen,
+  activeAnalysis,
   onChange,
   onReanalyze
 }: {
   sample?: SampleRecord;
   isOpen: boolean;
+  activeAnalysis?: ActiveAnalysis | null;
   onChange: (patch: Partial<SampleRecord>) => void;
   onReanalyze: () => void;
 }) {
@@ -497,6 +697,22 @@ function Inspector({
           </button>
         </div>
       </div>
+
+      {activeAnalysis && sample && activeAnalysis.sampleId === sample.id && (
+        <div className="inspector-analyzing-card">
+          <div className="inspector-analyzing-card-head">
+            <Loader2 size={14} className="spin text-teal" />
+            <strong>Analyzing sample ({activeAnalysis.filePercent}%)</strong>
+          </div>
+          <p>{activeAnalysis.stageMessage}</p>
+          <div className="inspector-progress-track">
+            <div
+              className="inspector-progress-fill"
+              style={{ width: `${Math.max(5, activeAnalysis.filePercent)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="wave-panel">
         <button
@@ -649,9 +865,32 @@ function ConfidenceRow({ label, value }: { label: string; value?: number }) {
   );
 }
 
-function ConfidenceBadge({ sample }: { sample: SampleRecord }) {
+function ConfidenceBadge({
+  sample,
+  isAnalyzingNow,
+  percent
+}: {
+  sample: SampleRecord;
+  isAnalyzingNow?: boolean;
+  percent?: number;
+}) {
   if (sample.status === "error") return <span className="badge bad">Error</span>;
-  if (sample.status === "analyzing") return <span className="badge active">Analyzing</span>;
+  if (isAnalyzingNow) {
+    return (
+      <span className="badge active analyzing-cell-badge" title="Analyzing now">
+        <Loader2 size={11} className="spin" />
+        <span>{percent ? `${percent}%` : "Analyzing"}</span>
+      </span>
+    );
+  }
+  if (sample.status === "analyzing") {
+    return (
+      <span className="badge active analyzing-cell-badge">
+        <Loader2 size={11} className="spin" />
+        <span>Analyzing</span>
+      </span>
+    );
+  }
   if (sample.verified) return <span className="badge verified">Verified</span>;
 
   const analysis = sample.analysis;
